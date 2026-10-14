@@ -1,0 +1,6 @@
+[client]
+showDeployButton = false
+toolbarMode = "minimal"
+
+[browser]
+gatherUsageStats = false

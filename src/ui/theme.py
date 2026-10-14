@@ -199,6 +199,18 @@ header[data-testid="stHeader"] {{
     border-bottom: 1px solid var(--cf-border) !important;
 }}
 
+/* Remove Streamlit Deploy Button & Clutter */
+.stAppDeployButton,
+[data-testid="stAppDeployButton"],
+button[data-testid="stAppDeployButton"],
+#stDeployButton,
+div[data-testid="stStatusWidget"] {{
+    display: none !important;
+    visibility: hidden !important;
+    opacity: 0 !important;
+    pointer-events: none !important;
+}}
+
 /* Left Navigation Sidebar */
 section[data-testid="stSidebar"] {{
     background-color: var(--cf-bg-sidebar) !important;
