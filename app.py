@@ -325,24 +325,82 @@ if menu_choice == "Overview":
             """)
 
     with right_col:
-        render_html("""
+        timeline_data = stats.get("timeline", [])
+        today_iso = datetime.now(timezone.utc).date().isoformat()
+        max_val = max([item["total"] for item in timeline_data] + [5])
+
+        bars_html = []
+        for item in timeline_data:
+            tot = item["total"]
+            phish = item["phishing"]
+            susp = item["suspicious"]
+            safe = item["safe"]
+            is_today = (item["day"] == today_iso)
+
+            h_px = max(int((tot / max_val) * 110), 4) if tot > 0 else 4
+
+            if tot > 0:
+                p_h = int((phish / tot) * 100)
+                s_h = int((susp / tot) * 100)
+                c_h = 100 - p_h - s_h
+                segments = ""
+                if phish > 0:
+                    segments += f"<div style='height:{p_h}%; background:#ef4444; width:100%;' title='Phishing: {phish}'></div>"
+                if susp > 0:
+                    segments += f"<div style='height:{s_h}%; background:#f59e0b; width:100%;' title='Suspicious: {susp}'></div>"
+                if safe > 0:
+                    segments += f"<div style='height:{c_h}%; background:#10b981; width:100%;' title='Clean: {safe}'></div>"
+            else:
+                segments = "<div style='height:100%; background:var(--cf-border-subtle); width:100%; border-radius:2px;'></div>"
+
+            bars_html.append(
+                f"<div style='flex:1; display:flex; flex-direction:column; align-items:center; justify-content:flex-end; height:155px; padding:0 3px;' title='{item[\"date_label\"]}: {tot} Audits ({phish} Phish, {susp} Suspicious, {safe} Clean)'>"
+                f"<div style='font-size:12px; font-weight:700; color:var(--cf-orange); margin-bottom:6px; min-height:16px;'>{tot if tot > 0 else ''}</div>"
+                f"<div style='width:100%; height:{h_px}px; min-height:4px; max-height:110px; background:var(--cf-border); border-radius:3px 3px 0 0; overflow:hidden; display:flex; flex-direction:column-reverse; box-shadow:0 1px 2px rgba(0,0,0,0.08);'>{segments}</div>"
+                f"<div style='font-size:11px; font-weight:{\"700\" if is_today else \"500\"}; color:{\"var(--cf-orange)\" if is_today else \"var(--cf-text-secondary)\"}; margin-top:8px; text-align:center;'>{item[\"date_label\"]}</div>"
+                f"</div>"
+            )
+
+        bars_markup = "".join(bars_html)
+        tl_total = sum(x["total"] for x in timeline_data)
+        tl_phish = sum(x["phishing"] for x in timeline_data)
+        tl_susp = sum(x["suspicious"] for x in timeline_data)
+        tl_safe = sum(x["safe"] for x in timeline_data)
+
+        render_html(f"""
         <div class="cf-card">
             <div class="cf-card-header">
                 <div>
                     <div class="cf-card-title">Audit Activity Timeline</div>
-                    <div class="cf-card-subtitle">Historical scanning volume over time.</div>
+                    <div class="cf-card-subtitle">Rolling 7-day security audit volume.</div>
                 </div>
+                <div style="display:flex; align-items:center; gap:10px; font-size:11px; font-weight:600;">
+                    <span style="display:inline-flex; align-items:center; gap:4px; color:#10b981;"><span style="width:7px; height:7px; border-radius:50%; background:#10b981;"></span> Safe</span>
+                    <span style="display:inline-flex; align-items:center; gap:4px; color:#f59e0b;"><span style="width:7px; height:7px; border-radius:50%; background:#f59e0b;"></span> Suspicious</span>
+                    <span style="display:inline-flex; align-items:center; gap:4px; color:#ef4444;"><span style="width:7px; height:7px; border-radius:50%; background:#ef4444;"></span> Threat</span>
+                </div>
+            </div>
+            <div style="display:flex; align-items:flex-end; justify-content:space-between; width:100%; padding:6px 0 4px 0; border-bottom:1px solid var(--cf-border);">
+                {bars_markup}
+            </div>
+            <div style="display:flex; justify-content:space-between; align-items:center; padding-top:10px; font-size:12px; color:var(--cf-text-secondary);">
+                <span><b>7-Day Volume:</b> {tl_total} Scans</span>
+                <span><b>{tl_phish}</b> Blocked &nbsp;|&nbsp; <b>{tl_susp}</b> Suspicious &nbsp;|&nbsp; <b>{tl_safe}</b> Clean</span>
             </div>
         </div>
         """)
-        if stats["timeline"]:
-            t_df = pd.DataFrame(stats["timeline"]).rename(
-                columns={"total": "Total Scans", "phishing": "Threats Blocked"}
-            ).set_index("day")
-            # 2 columns match 2 colors: Orange for Total Scans, Red for Threats Blocked
-            st.bar_chart(t_df, color=["#f38020", "#ef4444"], height=200)
-        else:
-            st.caption("Daily timeline chart accumulates as security scans are executed.")
+
+        with st.expander("📊 View Detailed Daily Telemetry", expanded=False):
+            t_df = pd.DataFrame(timeline_data)[["date_label", "total", "phishing", "suspicious", "safe"]].rename(
+                columns={
+                    "date_label": "Date",
+                    "total": "Total Scans",
+                    "phishing": "Threats Blocked",
+                    "suspicious": "Suspicious Flags",
+                    "safe": "Clean Verified"
+                }
+            )
+            st.dataframe(t_df, use_container_width=True, hide_index=True)
 
 
 # ==============================================================================

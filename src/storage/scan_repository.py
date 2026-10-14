@@ -7,7 +7,7 @@ and aggregates accurate metrics without data fabrication.
 import sqlite3
 import json
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from src.config import DATABASE_PATH
 from src.utils.logging_config import logger
@@ -137,10 +137,25 @@ class ScanRepository:
         """
         Calculates real summary metrics strictly from stored scan records.
         Never invents or fabricates live numbers.
+        Generates a continuous rolling 7-day timeline.
         """
         with self._get_connection() as conn:
             total = conn.execute("SELECT COUNT(*) FROM scans").fetchone()[0]
+            today_date = datetime.now(timezone.utc).date()
+
             if total == 0:
+                empty_tl = []
+                for i in range(6, -1, -1):
+                    d = today_date - timedelta(days=i)
+                    empty_tl.append({
+                        "day": d.isoformat(),
+                        "date_label": d.strftime("%b %d"),
+                        "weekday": d.strftime("%a"),
+                        "total": 0,
+                        "phishing": 0,
+                        "suspicious": 0,
+                        "safe": 0
+                    })
                 return {
                     "total_scans": 0,
                     "phishing_count": 0,
@@ -148,7 +163,7 @@ class ScanRepository:
                     "safe_count": 0,
                     "inconclusive_count": 0,
                     "avg_risk_score": 0.0,
-                    "timeline": []
+                    "timeline": empty_tl
                 }
 
             phishing = conn.execute("SELECT COUNT(*) FROM scans WHERE verdict LIKE '%PHISHING%'").fetchone()[0]
@@ -157,20 +172,44 @@ class ScanRepository:
             inconclusive = total - (phishing + suspicious + safe)
             avg_risk = conn.execute("SELECT AVG(risk_score) FROM scans").fetchone()[0] or 0.0
 
-            # Last 7 records for activity trend
+            # Query daily aggregates for the past 14 days
             trend_rows = conn.execute("""
-                SELECT substr(timestamp, 1, 10) as day, COUNT(*) as count,
-                       SUM(CASE WHEN verdict LIKE '%PHISHING%' THEN 1 ELSE 0 END) as phish_count
+                SELECT substr(timestamp, 1, 10) as day,
+                       COUNT(*) as total,
+                       SUM(CASE WHEN verdict LIKE '%PHISHING%' THEN 1 ELSE 0 END) as phish_count,
+                       SUM(CASE WHEN verdict LIKE '%SUSPICIOUS%' THEN 1 ELSE 0 END) as susp_count,
+                       SUM(CASE WHEN verdict LIKE '%NO PHISHING%' THEN 1 ELSE 0 END) as safe_count
                 FROM scans
                 GROUP BY day
                 ORDER BY day DESC
-                LIMIT 7
+                LIMIT 14
             """).fetchall()
 
-            timeline = [
-                {"day": r[0], "total": r[1], "phishing": r[2]}
-                for r in reversed(trend_rows)
-            ]
+            day_map = {
+                r[0]: {
+                    "total": r[1],
+                    "phishing": r[2],
+                    "suspicious": r[3],
+                    "safe": r[4]
+                }
+                for r in trend_rows
+            }
+
+            # Generate rolling 7-day timeline (past 6 days through today)
+            timeline = []
+            for i in range(6, -1, -1):
+                day_obj = today_date - timedelta(days=i)
+                day_iso = day_obj.isoformat()
+                entry = day_map.get(day_iso, {"total": 0, "phishing": 0, "suspicious": 0, "safe": 0})
+                timeline.append({
+                    "day": day_iso,
+                    "date_label": day_obj.strftime("%b %d"),
+                    "weekday": day_obj.strftime("%a"),
+                    "total": entry["total"],
+                    "phishing": entry["phishing"],
+                    "suspicious": entry["suspicious"],
+                    "safe": entry["safe"]
+                })
 
             return {
                 "total_scans": total,
