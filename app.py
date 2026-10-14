@@ -53,6 +53,7 @@ from src.comparison.brand_comparison import compare_domains
 from src.utils.url_validation import validate_url_input, redact_sensitive_query_params
 from src.inspection.safe_fetcher import safe_fetch_url
 from src.inspection.content_analyzer import analyze_html_content
+from src.inspection.qr_scanner import decode_qr_image, get_sample_qr_codes, generate_qr_image_bytes
 
 # ==============================================================================
 # SAFE HTML RENDERING HELPER (PREVENTS COMMONMARK INDENTED CODE BLOCK BUG)
@@ -173,6 +174,7 @@ with st.sidebar:
     render_html("<div style='font-size:12px; margin-bottom:4px;'><span style='color:#10b981;'>●</span> Email Forensics: <b>Active</b></div>")
     render_html("<div style='font-size:12px; margin-bottom:4px;'><span style='color:#10b981;'>●</span> Public Suffix Boundary: <b>Active</b></div>")
     render_html("<div style='font-size:12px; margin-bottom:4px;'><span style='color:#10b981;'>●</span> SSRF Sandbox: <b>Enforced</b></div>")
+    render_html("<div style='font-size:12px; margin-bottom:4px;'><span style='color:#10b981;'>●</span> Quishing (QR) Defense: <b>Online</b></div>")
     render_html(f"<div style='font-size:12px;'><span style='color:{'#10b981' if (GOOGLE_SAFE_BROWSING_KEY or VIRUSTOTAL_API_KEY) else '#f59e0b'};'>●</span> Threat Feeds: <b>{'API Active' if (GOOGLE_SAFE_BROWSING_KEY or VIRUSTOTAL_API_KEY) else 'Local Signatures'}</b></div>")
 
     render_html("<hr style='margin: 14px 0; border: none; border-top: 1px solid var(--cf-border);'>")
@@ -181,6 +183,164 @@ with st.sidebar:
 
 # Inject centralized dynamic theme stylesheet
 render_html(generate_theme_css(current_theme))
+
+
+# ==============================================================================
+# REUSABLE SCAN AUDIT RESULTS RENDERER
+# ==============================================================================
+def render_scan_results_view(scan_res: dict, key_prefix: str = "scan"):
+    """
+    Renders Cloudflare-themed multi-layer audit results, metrics breakdown,
+    observed threat findings, and export options.
+    """
+    verdict = scan_res["verdict"]
+    badge = scan_res["verdict_badge"]
+    risk = scan_res["risk_score"]
+
+    if badge == "CRITICAL_PHISHING":
+        badge_class = "cf-badge-danger"
+        dot_c = "var(--cf-phish-dot)"
+    elif badge == "SUSPICIOUS":
+        badge_class = "cf-badge-warning"
+        dot_c = "var(--cf-susp-dot)"
+    elif badge == "INCONCLUSIVE":
+        badge_class = "cf-badge-neutral"
+        dot_c = "var(--cf-text-muted)"
+    else:
+        badge_class = "cf-badge-safe"
+        dot_c = "var(--cf-safe-dot)"
+
+    # Top Verdict Card
+    render_html(f"""
+    <div class="cf-card" style="border-left: 5px solid {dot_c}; margin-top:16px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;">
+            <div>
+                <span class="cf-badge {badge_class}"><span class="cf-badge-dot"></span> {verdict.upper()}</span>
+                <div style="font-size:16px; font-weight:600; color:var(--cf-text-primary); margin-top:10px;">{scan_res['summary_statement']}</div>
+                <div style="font-size:13px; color:var(--cf-text-secondary); margin-top:3px;">
+                    Audited Target: <code class="mono" style="font-size:13px;">{scan_res['redacted_url']}</code>
+                </div>
+            </div>
+            <div style="text-align:right;">
+                <div style="font-size:36px; font-weight:700; color:{dot_c};">{risk} / 100</div>
+                <div style="font-size:11px; font-weight:600; text-transform:uppercase; color:var(--cf-text-muted);">Threat Risk Index</div>
+            </div>
+        </div>
+    </div>
+    """)
+
+    # Quantitative Metrics Row
+    sm1, sm2, sm3, sm4 = st.columns(4)
+    with sm1: st.metric("Composite Risk Score", f"{risk} / 100")
+    with sm2:
+        p_cnn = scan_res.get("cnn_probability")
+        st.metric("1D-CNN Confidence", f"{p_cnn:.1%}" if p_cnn is not None else "N/A")
+    with sm3:
+        p_ml = scan_res.get("ml_probability")
+        st.metric("XGBoost Probability", f"{p_ml:.1%}" if p_ml is not None else "N/A")
+    with sm4: st.metric("Heuristic Risk Score", f"{scan_res.get('rule_risk_score', 0)} / 100")
+
+    st.progress(min(max(risk, 0), 100))
+
+    # Status of Performed Checks Grid
+    st.markdown("### ⚙️ Verification Checks Breakdown")
+    engines = scan_res.get("engine_results", {})
+    eng_cols = st.columns(len(engines))
+    for i, (eng_name, eng_info) in enumerate(engines.items()):
+        with eng_cols[i]:
+            st_status = eng_info.get("status", "NOT_CHECKED")
+            if st_status == "COMPLETED":
+                b_type = "cf-badge-safe"
+                b_text = "PASSED"
+            elif st_status == "WARNING_DETECTED":
+                b_type = "cf-badge-danger"
+                b_text = "FLAGGED"
+            else:
+                b_type = "cf-badge-neutral"
+                b_text = "SKIPPED"
+
+            render_html(f"""
+            <div class="cf-card" style="padding:12px; text-align:center;">
+                <div style="font-size:12px; font-weight:600; color:var(--cf-text-primary); margin-bottom:6px;">{eng_name.replace('_', ' ').title()}</div>
+                <span class="cf-badge {b_type}"><span class="cf-badge-dot"></span> {b_text}</span>
+            </div>
+            """)
+
+    # Detailed Observed Findings Panel
+    st.markdown("### 📋 Detailed Observed Findings")
+    findings = scan_res.get("findings", [])
+    if findings:
+        for f in findings:
+            sev = f.get("severity", "INFO")
+            sev_class = 'cf-badge-danger' if sev in ('CRITICAL', 'HIGH') else ('cf-badge-warning' if sev == 'MEDIUM' else 'cf-badge-safe')
+            render_html(f"""
+            <div class="cf-finding-box {sev}">
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <span style="font-weight:600; color:var(--cf-text-primary); font-size:14px;">{f['name']}</span>
+                    <span class="cf-badge {sev_class}">{sev}</span>
+                </div>
+                <div style="color:var(--cf-text-secondary); font-size:13px; margin-top:4px;"><b>Evidence:</b> {f['evidence']}</div>
+                <div style="color:var(--cf-text-muted); font-size:12px; margin-top:2px;"><b>Analysis:</b> {f['explanation']}</div>
+                <div style="color:var(--cf-orange); font-size:11px; margin-top:4px;"><b>Source:</b> {f['source']} &nbsp;|&nbsp; <b>Action:</b> {f['action']}</div>
+            </div>
+            """)
+    else:
+        st.info("No adverse security signals, deceptive character substitutions, or brand impersonation detected.")
+
+    # Public Suffix List & Structural Components
+    with st.expander("🧩 Public Suffix List & Structural Components", expanded=False):
+        comp = scan_res.get("components", {})
+        c_rows = "".join([f"<tr><td style='font-weight:600; width:35%;'>{k.replace('_', ' ').title()}</td><td><code class='mono'>{v if v is not None else 'None'}</code></td></tr>" for k, v in comp.items()])
+        render_html(f"""
+        <table class="cf-table">
+            <thead>
+                <tr>
+                    <th>Structural Attribute</th>
+                    <th>Extracted Value</th>
+                </tr>
+            </thead>
+            <tbody>
+                {c_rows}
+            </tbody>
+        </table>
+        """)
+
+    # Recommended Actions
+    st.markdown("### 🛡️ Recommended Incident Response")
+    for act in scan_res.get("recommended_actions", []):
+        st.markdown(f"• {act}")
+
+    # Export Scan Reports
+    st.markdown("### 💾 Export Scan Audit Report")
+    exp1, exp2, exp3 = st.columns(3)
+    with exp1:
+        st.download_button(
+            "⬇️ Download JSON Audit",
+            data=generate_json_report(scan_res),
+            file_name=f"audit_{scan_res['hostname']}.json",
+            mime="application/json",
+            use_container_width=True,
+            key=f"{key_prefix}_dl_json"
+        )
+    with exp2:
+        st.download_button(
+            "⬇️ Download CSV Record",
+            data=generate_csv_report([scan_res]),
+            file_name=f"audit_{scan_res['hostname']}.csv",
+            mime="text/csv",
+            use_container_width=True,
+            key=f"{key_prefix}_dl_csv"
+        )
+    with exp3:
+        st.download_button(
+            "📋 Download Text Summary",
+            data=generate_text_summary(scan_res),
+            file_name=f"summary_{scan_res['hostname']}.txt",
+            mime="text/plain",
+            use_container_width=True,
+            key=f"{key_prefix}_dl_txt"
+        )
+
 
 
 # ==============================================================================
@@ -319,239 +479,291 @@ if menu_choice == "Overview":
         <div class="cf-card" style="height:100%;">
             <div class="cf-card-header">
                 <div>
-                    <div class="cf-card-title">🛡️ Boundary Guard & Forensics</div>
-                    <div class="cf-card-subtitle">Zero false-positive academic protection.</div>
+                    <div class="cf-card-title">🛡️ Boundary Guard & Quishing Forensics</div>
+                    <div class="cf-card-subtitle">Zero false-positive PSL & QR defense.</div>
                 </div>
                 <span class="cf-badge cf-badge-safe"><span class="cf-badge-dot"></span> Active</span>
             </div>
             <div style="font-size:13px; color:var(--cf-text-secondary); line-height:1.6;">
-                Enforces strict Public Suffix List (eTLD+1) boundary checking to protect genuine university portals, institutional single-sign-on links, and legitimate web services against false alarm flags.
+                Enforces strict Public Suffix List (eTLD+1) boundary checking to protect genuine university portals and institutional links, paired with multi-pass QR vision decoding to neutralize Quishing threats before mobile devices connect.
             </div>
             <div style="margin-top:14px; padding-top:10px; border-top:1px solid var(--cf-border); font-size:12px; color:var(--cf-text-muted);">
-                <b>PSL:</b> eTLD+1 Compliant &nbsp;|&nbsp; <b>Allowlist:</b> Verified
+                <b>PSL:</b> eTLD+1 Compliant &nbsp;|&nbsp; <b>Quishing:</b> Vision Decoder Active
             </div>
         </div>
         """)
 
 
-# ==============================================================================
-# ROUTE 2: URL SCANNER (PRIMARY SCANNER)
-# ==============================================================================
 elif menu_choice == "URL Scanner":
     render_html("""
     <div style="font-size:12px; color:var(--cf-text-muted); margin-bottom:4px;">
-        Threat Defense &nbsp;/&nbsp; <b>URL Scanner</b>
+        Threat Defense &nbsp;/&nbsp; <b>URL & Quishing Scanner</b>
     </div>
     <div class="cf-header-bar">
         <div class="cf-header-brand">
             <div class="cf-logo-icon">🔍</div>
             <div>
-                <h1 class="cf-header-title">URL Security Scanner</h1>
+                <h1 class="cf-header-title">URL & Quishing Security Scanner</h1>
                 <div style="font-size:13px; color:var(--cf-text-secondary); margin-top:2px;">
-                    Multi-vector inspection for credential harvesting, lookalike domains, and zero-day threats.
+                    Multi-vector inspection for credential harvesting, lookalike domains, zero-day links, and QR code phishing.
                 </div>
             </div>
         </div>
     </div>
     """)
 
-    # One-Click Test Samples Row
-    render_html("<div style='font-size:12px; font-weight:600; color:var(--cf-text-secondary); margin-bottom:6px;'>DEMONSTRATION TEST SAMPLES:</div>")
-    tb1, tb2, tb3, tb4, tb5 = st.columns(5)
-    with tb1:
-        if st.button("🎓 Stanford Portal (Clean)", use_container_width=True):
-            st.session_state["scanner_url_input"] = "https://portal.stanford.edu/student/login"
-    with tb2:
-        if st.button("🎓 Oxford Mail (Clean)", use_container_width=True):
-            st.session_state["scanner_url_input"] = "https://mail.ox.ac.uk/owa"
-    with tb3:
-        if st.button("🔴 PayPal Phish (Malicious)", use_container_width=True):
-            st.session_state["scanner_url_input"] = "http://paypal-security-verification.xyz/login"
-    with tb4:
-        if st.button("🔴 Raw IP Admin (Suspicious)", use_container_width=True):
-            st.session_state["scanner_url_input"] = "http://192.168.1.1/admin-login"
-    with tb5:
-        if st.button("🟡 Subdomain Trap (Lookalike)", use_container_width=True):
-            st.session_state["scanner_url_input"] = "http://stanford.edu.account-update.xyz/login"
+    tab_direct, tab_quishing = st.tabs(["🔗 Direct URL Input", "📱 QR Code (Quishing) Scanner"])
 
-    default_url = st.session_state.get("scanner_url_input", "")
-    target_url = st.text_input("Enter website URL or domain to audit:", value=default_url, placeholder="https://example.com/login")
+    # --------------------------------------------------------------------------
+    # SUB-TAB 1: DIRECT URL INPUT
+    # --------------------------------------------------------------------------
+    with tab_direct:
+        # One-Click Test Samples Row
+        render_html("<div style='font-size:12px; font-weight:600; color:var(--cf-text-secondary); margin-bottom:6px;'>DEMONSTRATION TEST SAMPLES:</div>")
+        tb1, tb2, tb3, tb4, tb5 = st.columns(5)
+        with tb1:
+            if st.button("🎓 Stanford Portal (Clean)", key="demo_btn_stanford", use_container_width=True):
+                st.session_state["scanner_url_input"] = "https://portal.stanford.edu/student/login"
+                st.session_state["last_url_scan_res"] = None
+        with tb2:
+            if st.button("🎓 Oxford Mail (Clean)", key="demo_btn_oxford", use_container_width=True):
+                st.session_state["scanner_url_input"] = "https://mail.ox.ac.uk/owa"
+                st.session_state["last_url_scan_res"] = None
+        with tb3:
+            if st.button("🔴 PayPal Phish (Malicious)", key="demo_btn_paypal", use_container_width=True):
+                st.session_state["scanner_url_input"] = "http://paypal-security-verification.xyz/login"
+                st.session_state["last_url_scan_res"] = None
+        with tb4:
+            if st.button("🔴 Raw IP Admin (Suspicious)", key="demo_btn_ip", use_container_width=True):
+                st.session_state["scanner_url_input"] = "http://192.168.1.1/admin-login"
+                st.session_state["last_url_scan_res"] = None
+        with tb5:
+            if st.button("🟡 Subdomain Trap (Lookalike)", key="demo_btn_trap", use_container_width=True):
+                st.session_state["scanner_url_input"] = "http://stanford.edu.account-update.xyz/login"
+                st.session_state["last_url_scan_res"] = None
 
-    # Expandable Inspection Parameters
-    with st.expander("⚙️ Inspection Controls & Toggles", expanded=False):
-        c1, c2, c3, c4 = st.columns(4)
-        with c1: opt_dns = st.checkbox("Query Live DNS", value=True)
-        with c2: opt_tls = st.checkbox("Inspect TLS Certificate", value=True)
-        with c3: opt_intel = st.checkbox("Query Threat Intelligence", value=True)
-        with c4: opt_html = st.checkbox("Deep HTML Content Inspection (SSRF-Safe)", value=False)
+        default_url = st.session_state.get("scanner_url_input", "")
+        target_url = st.text_input("Enter website URL or domain to audit:", value=default_url, placeholder="https://example.com/login", key="input_direct_url")
 
-    col_btn_start, col_btn_reset = st.columns([4, 1])
-    with col_btn_start:
-        btn_run_scan = st.button("Scan URL", type="primary", use_container_width=True)
-    with col_btn_reset:
-        if st.button("Scan Another URL", use_container_width=True):
-            st.session_state["scanner_url_input"] = ""
-            st.rerun()
+        # Expandable Inspection Parameters
+        with st.expander("⚙️ Inspection Controls & Toggles", expanded=False):
+            c1, c2, c3, c4 = st.columns(4)
+            with c1: opt_dns = st.checkbox("Query Live DNS", value=True, key="opt_dns_direct")
+            with c2: opt_tls = st.checkbox("Inspect TLS Certificate", value=True, key="opt_tls_direct")
+            with c3: opt_intel = st.checkbox("Query Threat Intelligence", value=True, key="opt_intel_direct")
+            with c4: opt_html = st.checkbox("Deep HTML Content Inspection (SSRF-Safe)", value=False, key="opt_html_direct")
 
-    if btn_run_scan:
-        is_v, err_msg = validate_url_input(target_url)
-        if not is_v:
-            st.error(f"⚠️ Validation Error: {err_msg}")
-        else:
-            with st.spinner("Executing multi-vector threat audit..."):
-                scan_res = engine.scan_url(
-                    target_url,
-                    include_dns=opt_dns,
-                    include_tls=opt_tls,
-                    include_threat_intel=opt_intel,
-                    deep_inspection=opt_html
-                )
-                repo.save_scan(scan_res)
+        col_btn_start, col_btn_reset = st.columns([4, 1])
+        with col_btn_start:
+            btn_run_scan = st.button("Scan URL", type="primary", key="btn_run_direct", use_container_width=True)
+        with col_btn_reset:
+            if st.button("Scan Another URL", key="btn_reset_direct", use_container_width=True):
+                st.session_state["scanner_url_input"] = ""
+                st.session_state["last_url_scan_res"] = None
+                st.rerun()
 
-            verdict = scan_res["verdict"]
-            badge = scan_res["verdict_badge"]
-            risk = scan_res["risk_score"]
-
-            if badge == "CRITICAL_PHISHING":
-                badge_class = "cf-badge-danger"
-                dot_c = "var(--cf-phish-dot)"
-            elif badge == "SUSPICIOUS":
-                badge_class = "cf-badge-warning"
-                dot_c = "var(--cf-susp-dot)"
-            elif badge == "INCONCLUSIVE":
-                badge_class = "cf-badge-neutral"
-                dot_c = "var(--cf-text-muted)"
+        if btn_run_scan and target_url.strip():
+            is_v, err_msg = validate_url_input(target_url)
+            if not is_v:
+                st.error(f"⚠️ Validation Error: {err_msg}")
             else:
-                badge_class = "cf-badge-safe"
-                dot_c = "var(--cf-safe-dot)"
+                with st.spinner("Executing multi-vector threat audit..."):
+                    scan_res = engine.scan_url(
+                        target_url,
+                        include_dns=opt_dns,
+                        include_tls=opt_tls,
+                        include_threat_intel=opt_intel,
+                        deep_inspection=opt_html
+                    )
+                    repo.save_scan(scan_res)
+                    st.session_state["last_url_scan_res"] = scan_res
 
-            # Results Section: Top Verdict Card (Rendered cleanly without code leakage)
-            render_html(f"""
-            <div class="cf-card" style="border-left: 5px solid {dot_c}; margin-top:16px;">
-                <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;">
-                    <div>
-                        <span class="cf-badge {badge_class}"><span class="cf-badge-dot"></span> {verdict.upper()}</span>
-                        <div style="font-size:16px; font-weight:600; color:var(--cf-text-primary); margin-top:10px;">{scan_res['summary_statement']}</div>
-                        <div style="font-size:13px; color:var(--cf-text-secondary); margin-top:3px;">
-                            Audited Target: <code class="mono" style="font-size:13px;">{scan_res['redacted_url']}</code>
-                        </div>
-                    </div>
-                    <div style="text-align:right;">
-                        <div style="font-size:36px; font-weight:700; color:{dot_c};">{risk} / 100</div>
-                        <div style="font-size:11px; font-weight:600; text-transform:uppercase; color:var(--cf-text-muted);">Threat Risk Index</div>
-                    </div>
+        if st.session_state.get("last_url_scan_res"):
+            render_scan_results_view(st.session_state["last_url_scan_res"], key_prefix="direct")
+
+    # --------------------------------------------------------------------------
+    # SUB-TAB 2: QUISHING (QR CODE) SCANNER
+    # --------------------------------------------------------------------------
+    with tab_quishing:
+        render_html("""
+        <div class="cf-card" style="margin-bottom:14px;">
+            <div class="cf-card-header">
+                <div>
+                    <div class="cf-card-title">📱 Quishing (QR Code Phishing) Defense Engine</div>
+                    <div class="cf-card-subtitle">Zero-day physical and digital QR phishing detection with multi-pass computer vision decoding.</div>
                 </div>
+                <span class="cf-badge cf-badge-orange"><span class="cf-badge-dot"></span> Active Defense</span>
             </div>
-            """)
+            <div style="font-size:13px; color:var(--cf-text-secondary); line-height:1.6;">
+                <b>What is Quishing?</b> Attackers embed credential harvesting URLs inside QR codes on physical posters, restaurant tables, parking meters, or email PDF attachments. Because mobile phone camera software conceals the full destination host and domain indicators, victims scan and enter credentials without visual warning. FlareShield decodes the embedded image payload using multi-stage OpenCV computer vision and executes neural threat analysis before any device establishes a connection.
+            </div>
+        </div>
+        """)
 
-            # Quantitative Metrics Row
-            sm1, sm2, sm3, sm4 = st.columns(4)
-            with sm1: st.metric("Composite Risk Score", f"{risk} / 100")
-            with sm2:
-                p_cnn = scan_res["cnn_probability"]
-                st.metric("1D-CNN Confidence", f"{p_cnn:.1%}" if p_cnn is not None else "N/A")
-            with sm3:
-                p_ml = scan_res["ml_probability"]
-                st.metric("XGBoost Probability", f"{p_ml:.1%}" if p_ml is not None else "N/A")
-            with sm4: st.metric("Heuristic Risk Score", f"{scan_res['rule_risk_score']} / 100")
+        # One-Click Demo QR Codes
+        render_html("<div style='font-size:12px; font-weight:600; color:var(--cf-text-secondary); margin-bottom:6px;'>DEMONSTRATION QR SAMPLES:</div>")
+        qr_samples = get_sample_qr_codes()
+        qs1, qs2, qs3, qs4, qs5 = st.columns(5)
+        with qs1:
+            if st.button("🔴 PayPal Phish (Malicious)", key="btn_sample_qr_paypal", use_container_width=True):
+                st.session_state["active_qr_bytes"] = qr_samples["paypal_phish"]["png_bytes"]
+                st.session_state["active_qr_name"] = qr_samples["paypal_phish"]["name"]
+                st.session_state["active_qr_desc"] = qr_samples["paypal_phish"]["description"]
+                st.session_state["last_qr_scan_res"] = None
+        with qs2:
+            if st.button("🎓 Stanford Portal (Clean)", key="btn_sample_qr_stanford", use_container_width=True):
+                st.session_state["active_qr_bytes"] = qr_samples["stanford_clean"]["png_bytes"]
+                st.session_state["active_qr_name"] = qr_samples["stanford_clean"]["name"]
+                st.session_state["active_qr_desc"] = qr_samples["stanford_clean"]["description"]
+                st.session_state["last_qr_scan_res"] = None
+        with qs3:
+            if st.button("🟡 Subdomain Trap (Lookalike)", key="btn_sample_qr_trap", use_container_width=True):
+                st.session_state["active_qr_bytes"] = qr_samples["subdomain_trap"]["png_bytes"]
+                st.session_state["active_qr_name"] = qr_samples["subdomain_trap"]["name"]
+                st.session_state["active_qr_desc"] = qr_samples["subdomain_trap"]["description"]
+                st.session_state["last_qr_scan_res"] = None
+        with qs4:
+            if st.button("🎓 Oxford Mail (Clean)", key="btn_sample_qr_oxford", use_container_width=True):
+                st.session_state["active_qr_bytes"] = qr_samples["oxford_mail"]["png_bytes"]
+                st.session_state["active_qr_name"] = qr_samples["oxford_mail"]["name"]
+                st.session_state["active_qr_desc"] = qr_samples["oxford_mail"]["description"]
+                st.session_state["last_qr_scan_res"] = None
+        with qs5:
+            if st.button("📶 Wi-Fi Config (Non-URL)", key="btn_sample_qr_wifi", use_container_width=True):
+                st.session_state["active_qr_bytes"] = qr_samples["wifi_text"]["png_bytes"]
+                st.session_state["active_qr_name"] = qr_samples["wifi_text"]["name"]
+                st.session_state["active_qr_desc"] = qr_samples["wifi_text"]["description"]
+                st.session_state["last_qr_scan_res"] = None
 
-            st.progress(min(max(risk, 0), 100))
+        # Image File Uploader
+        uploaded_qr_file = st.file_uploader(
+            "Upload QR Code Image (PNG, JPG, JPEG, WEBP):",
+            type=["png", "jpg", "jpeg", "webp"],
+            key="file_uploader_quishing",
+            help="Upload any screenshot, photo, flyer, or saved QR code image."
+        )
 
-            # Status of Performed Checks Grid
-            st.markdown("### ⚙️ Verification Checks Breakdown")
-            engines = scan_res["engine_results"]
-            eng_cols = st.columns(len(engines))
-            for i, (eng_name, eng_info) in enumerate(engines.items()):
-                with eng_cols[i]:
-                    st_status = eng_info.get("status", "NOT_CHECKED")
-                    if st_status == "COMPLETED":
-                        b_type = "cf-badge-safe"
-                        b_text = "PASSED"
-                    elif st_status == "WARNING_DETECTED":
-                        b_type = "cf-badge-danger"
-                        b_text = "FLAGGED"
-                    else:
-                        b_type = "cf-badge-neutral"
-                        b_text = "SKIPPED"
+        if uploaded_qr_file is not None:
+            st.session_state["active_qr_bytes"] = uploaded_qr_file.getvalue()
+            st.session_state["active_qr_name"] = uploaded_qr_file.name
+            st.session_state["active_qr_desc"] = "User uploaded image file"
+            st.session_state["last_qr_scan_res"] = None
 
-                    render_html(f"""
-                    <div class="cf-card" style="padding:12px; text-align:center;">
-                        <div style="font-size:12px; font-weight:600; color:var(--cf-text-primary); margin-bottom:6px;">{eng_name.replace('_', ' ').title()}</div>
-                        <span class="cf-badge {b_type}"><span class="cf-badge-dot"></span> {b_text}</span>
-                    </div>
-                    """)
+        # Active QR Code Display & Decoding
+        active_bytes = st.session_state.get("active_qr_bytes")
+        if active_bytes:
+            col_qr_img, col_qr_meta = st.columns([1, 2])
+            
+            # Run computer-vision decoding
+            decode_res = decode_qr_image(active_bytes)
 
-            # Detailed Observed Findings Panel
-            st.markdown("### 📋 Detailed Observed Findings")
-            findings = scan_res["findings"]
-            if findings:
-                for f in findings:
-                    sev = f.get("severity", "INFO")
-                    sev_class = 'cf-badge-danger' if sev in ('CRITICAL', 'HIGH') else ('cf-badge-warning' if sev == 'MEDIUM' else 'cf-badge-safe')
-                    render_html(f"""
-                    <div class="cf-finding-box {sev}">
-                        <div style="display:flex; justify-content:space-between; align-items:center;">
-                            <span style="font-weight:600; color:var(--cf-text-primary); font-size:14px;">{f['name']}</span>
-                            <span class="cf-badge {sev_class}">{sev}</span>
-                        </div>
-                        <div style="color:var(--cf-text-secondary); font-size:13px; margin-top:4px;"><b>Evidence:</b> {f['evidence']}</div>
-                        <div style="color:var(--cf-text-muted); font-size:12px; margin-top:2px;"><b>Analysis:</b> {f['explanation']}</div>
-                        <div style="color:var(--cf-orange); font-size:11px; margin-top:4px;"><b>Source:</b> {f['source']} &nbsp;|&nbsp; <b>Action:</b> {f['action']}</div>
-                    </div>
-                    """)
-            else:
-                st.info("No adverse security signals, deceptive character substitutions, or brand impersonation detected.")
-
-            # Public Suffix List & Structural Components (Clean Table instead of raw code/json)
-            with st.expander("🧩 Public Suffix List & Structural Components", expanded=False):
-                comp = scan_res.get("components", {})
-                c_rows = "".join([f"<tr><td style='font-weight:600; width:35%;'>{k.replace('_', ' ').title()}</td><td><code class='mono'>{v if v is not None else 'None'}</code></td></tr>" for k, v in comp.items()])
+            with col_qr_img:
+                st.image(active_bytes, caption=st.session_state.get("active_qr_name", "Inspected QR Code"), use_container_width=True)
+                strat_label = decode_res.get("strategy", "unknown").replace("_", " ").title()
+                w_px = decode_res.get("width", 0)
+                h_px = decode_res.get("height", 0)
                 render_html(f"""
-                <table class="cf-table">
-                    <thead>
-                        <tr>
-                            <th>Structural Attribute</th>
-                            <th>Extracted Value</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {c_rows}
-                    </tbody>
-                </table>
+                <div style="font-size:11px; color:var(--cf-text-muted); text-align:center; margin-top:4px;">
+                    Dimensions: <b>{w_px} × {h_px} px</b> &nbsp;|&nbsp; Pass: <b>{strat_label}</b>
+                </div>
                 """)
 
-            # Recommended Actions
-            st.markdown("### 🛡️ Recommended Incident Response")
-            for act in scan_res["recommended_actions"]:
-                st.markdown(f"• {act}")
+            with col_qr_meta:
+                if not decode_res["found"]:
+                    render_html("""
+                    <div class="cf-finding-box CRITICAL" style="margin-top:0;">
+                        <div style="display:flex; justify-content:space-between; align-items:center;">
+                            <span style="font-weight:600; color:var(--cf-text-primary); font-size:14px;">No QR Code Detected</span>
+                            <span class="cf-badge cf-badge-danger">DECODE ERROR</span>
+                        </div>
+                        <div style="color:var(--cf-text-secondary); font-size:13px; margin-top:6px;">
+                            The multi-pass computer vision pipeline was unable to locate valid QR locator patterns or alignment markers in this image.
+                        </div>
+                        <div style="color:var(--cf-text-muted); font-size:12px; margin-top:4px;">
+                            <b>Recommendation:</b> Ensure the uploaded image is unobstructed, has adequate contrast, and contains a standard QR code format.
+                        </div>
+                    </div>
+                    """)
+                else:
+                    is_url_payload = decode_res["is_url"]
+                    badge_style = "cf-badge-orange" if is_url_payload else "cf-badge-neutral"
+                    badge_text = "WEB URL PAYLOAD EXTRACTED" if is_url_payload else "NON-URL PLAIN TEXT"
+                    raw_text = decode_res["payload"]
 
-            # Export Scan Reports
-            st.markdown("### 💾 Export Scan Audit Report")
-            exp1, exp2, exp3 = st.columns(3)
-            with exp1:
-                st.download_button(
-                    "⬇️ Download JSON Audit",
-                    data=generate_json_report(scan_res),
-                    file_name=f"audit_{scan_res['hostname']}.json",
-                    mime="application/json",
-                    use_container_width=True
-                )
-            with exp2:
-                st.download_button(
-                    "⬇️ Download CSV Record",
-                    data=generate_csv_report([scan_res]),
-                    file_name=f"audit_{scan_res['hostname']}.csv",
-                    mime="text/csv",
-                    use_container_width=True
-                )
-            with exp3:
-                st.download_button(
-                    "📋 Download Text Summary",
-                    data=generate_text_summary(scan_res),
-                    file_name=f"summary_{scan_res['hostname']}.txt",
-                    mime="text/plain",
-                    use_container_width=True
-                )
+                    render_html(f"""
+                    <div class="cf-card" style="margin-top:0;">
+                        <div style="display:flex; justify-content:space-between; align-items:center;">
+                            <span class="cf-badge {badge_style}"><span class="cf-badge-dot"></span> {badge_text}</span>
+                            <span style="font-size:12px; color:var(--cf-text-muted);">Payload Size: {len(raw_text)} chars</span>
+                        </div>
+                        <div style="font-size:12px; font-weight:600; text-transform:uppercase; color:var(--cf-text-secondary); margin-top:10px;">
+                            Extracted QR Payload:
+                        </div>
+                        <div style="margin-top:4px; padding:10px; background:var(--cf-bg-surface); border:1px solid var(--cf-border); border-radius:4px; overflow-x:auto;">
+                            <code class="mono" style="font-size:13px; word-break:break-all; color:var(--cf-text-primary);">{raw_text}</code>
+                        </div>
+                    </div>
+                    """)
+
+                    if is_url_payload:
+                        extracted_dest = decode_res["sanitized_url"]
+                        render_html("""
+                        <div style="font-size:12px; color:var(--cf-text-secondary); margin-top:8px; line-height:1.5;">
+                            ⚠️ <b>Quishing Security Notice:</b> Physical and digital QR codes hide the full destination URL from mobile users. Click <b>Audit Decoded QR Destination</b> below to trigger FlareShield's 1D-CNN, XGBoost, DNS, and TLS verification pipeline before opening.
+                        </div>
+                        """)
+
+                        # Expandable Inspection Parameters for QR Scan
+                        with st.expander("⚙️ QR Inspection Controls & Toggles", expanded=False):
+                            qc1, qc2, qc3, qc4 = st.columns(4)
+                            with qc1: opt_qr_dns = st.checkbox("Query Live DNS", value=True, key="opt_dns_qr")
+                            with qc2: opt_qr_tls = st.checkbox("Inspect TLS Certificate", value=True, key="opt_tls_qr")
+                            with qc3: opt_qr_intel = st.checkbox("Query Threat Intelligence", value=True, key="opt_intel_qr")
+                            with qc4: opt_qr_html = st.checkbox("Deep HTML Content Inspection (SSRF-Safe)", value=False, key="opt_html_qr")
+
+                        col_audit_btn, col_reset_qr = st.columns([3, 1])
+                        with col_audit_btn:
+                            btn_audit_qr = st.button("⚡ Audit Decoded QR Destination", type="primary", key="btn_audit_qr_action", use_container_width=True)
+                        with col_reset_qr:
+                            if st.button("Reset QR Inspection", key="btn_clear_qr", use_container_width=True):
+                                st.session_state["active_qr_bytes"] = None
+                                st.session_state["active_qr_name"] = None
+                                st.session_state["active_qr_desc"] = None
+                                st.session_state["last_qr_scan_res"] = None
+                                st.rerun()
+
+                        if btn_audit_qr and extracted_dest:
+                            with st.spinner("Executing multi-vector threat audit on decoded QR destination..."):
+                                qr_scan_res = engine.scan_url(
+                                    extracted_dest,
+                                    include_dns=opt_qr_dns,
+                                    include_tls=opt_qr_tls,
+                                    include_threat_intel=opt_qr_intel,
+                                    deep_inspection=opt_qr_html
+                                )
+                                repo.save_scan(qr_scan_res)
+                                st.session_state["last_qr_scan_res"] = qr_scan_res
+                    else:
+                        render_html("""
+                        <div class="cf-finding-box INFO" style="margin-top:10px;">
+                            <div style="font-weight:600; color:var(--cf-text-primary);">ℹ️ Non-Web Data Payload</div>
+                            <div style="font-size:13px; color:var(--cf-text-secondary); margin-top:4px;">
+                                This QR code encodes plain text, contact info, or local configuration rather than a web URL. No remote HTTP connection will be initiated.
+                            </div>
+                        </div>
+                        """)
+                        if st.button("Clear / Reset", key="btn_clear_qr_nonurl", use_container_width=True):
+                            st.session_state["active_qr_bytes"] = None
+                            st.session_state["last_qr_scan_res"] = None
+                            st.rerun()
+
+            # Render QR Audit Results if scanned
+            if st.session_state.get("last_qr_scan_res"):
+                render_html("<div style='height:8px;'></div>")
+                render_html("<div style='font-size:14px; font-weight:600; color:var(--cf-text-primary); margin-top:8px;'>Decoded Destination Audit Verdict</div>")
+                render_scan_results_view(st.session_state["last_qr_scan_res"], key_prefix="quishing")
+        else:
+            st.info("👆 Select a demonstration sample above or upload a QR code image to inspect for Quishing threats.")
 
 
 # ==============================================================================
