@@ -19,6 +19,7 @@ import sys
 import os
 import time
 import json
+import textwrap
 import pandas as pd
 import streamlit as st
 from datetime import datetime, timezone
@@ -32,7 +33,15 @@ from src.config import (
     APP_NAME, APP_SUBTITLE, APP_VERSION,
     GOOGLE_SAFE_BROWSING_KEY, VIRUSTOTAL_API_KEY
 )
-from src.ui.theme import generate_theme_css, get_theme, get_plotly_layout, clean_html
+from src.ui.theme import generate_theme_css, get_theme, get_plotly_layout
+try:
+    from src.ui.theme import clean_html
+except ImportError:
+    def clean_html(html_str: str) -> str:
+        if not html_str:
+            return ""
+        return textwrap.dedent(html_str).strip()
+
 from src.detection.verdict_engine import MultiLayerDetectionEngine
 from src.email_analysis.email_scanner import EmailPhishingScanner
 from src.utils.domain_parser import allowlist_manager, domain_parser
