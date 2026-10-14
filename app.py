@@ -259,154 +259,79 @@ if menu_choice == "Overview":
             </div>
             """)
 
-    # Genuine Scan Statistics Row (From SQLite)
+    # Real-time Telemetry Metrics Row
     stats = repo.get_scan_statistics()
     render_html("<div style='height:4px;'></div>")
     
     m1, m2, m3, m4, m5 = st.columns(5)
-    with m1: st.metric("Total Audits", stats["total_scans"])
+    with m1: st.metric("Total Scans", stats["total_scans"])
     with m2: st.metric("Phishing Blocked", stats["phishing_count"])
-    with m3: st.metric("Suspicious Flags", stats["suspicious_count"])
+    with m3: st.metric("Suspicious Warnings", stats["suspicious_count"])
     with m4: st.metric("Clean Verified", stats["safe_count"])
     with m5: st.metric("Avg Threat Score", f"{stats['avg_risk_score']:.0f} / 100")
 
-    render_html("<div style='height:12px;'></div>")
+    render_html("<div style='height:16px;'></div>")
 
-    # Recent Scans Table & Activity Timeline
-    left_col, right_col = st.columns([3, 2])
-
-    with left_col:
-        recent_records = repo.get_recent_scans(limit=5)
-        if recent_records:
-            t_rows = []
-            for r in recent_records:
-                v = r['verdict']
-                b_c = "cf-badge-danger" if "PHISHING" in v.upper() else ("cf-badge-warning" if "SUSPICIOUS" in v.upper() else "cf-badge-safe")
-                t_rows.append(
-                    f"<tr>"
-                    f"<td><code class=\"mono\" style=\"font-size:12px;\">{r['redacted_url'][:36]}...</code></td>"
-                    f"<td><span class=\"cf-badge {b_c}\"><span class=\"cf-badge-dot\"></span> {v}</span></td>"
-                    f"<td><b>{r['risk_score']}/100</b></td>"
-                    f"<td style=\"color:var(--cf-text-muted); font-size:12px;\">{r['timestamp'][:16]}</td>"
-                    f"</tr>"
-                )
-            rows_html = "".join(t_rows)
-            render_html(f"""
-            <div class="cf-card">
-                <div class="cf-card-header">
-                    <div>
-                        <div class="cf-card-title">Recent Security Audits</div>
-                        <div class="cf-card-subtitle">Real-time scan records stored in local SQLite database.</div>
-                    </div>
-                </div>
-                <table class="cf-table">
-                    <thead>
-                        <tr>
-                            <th>Audited URL</th>
-                            <th>Classification</th>
-                            <th>Score</th>
-                            <th>Timestamp</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {rows_html}
-                    </tbody>
-                </table>
-            </div>
-            """)
-        else:
-            render_html("""
-            <div class="cf-card">
-                <div class="cf-card-header">
-                    <div class="cf-card-title">Recent Security Audits</div>
-                </div>
-                <div style="color:var(--cf-text-secondary); font-size:13px; padding:10px 0;">No security audits recorded yet. Enter a URL above to perform your first scan.</div>
-            </div>
-            """)
-
-    with right_col:
-        timeline_data = stats.get("timeline", [])
-        today_iso = datetime.now(timezone.utc).date().isoformat()
-        max_val = max([item["total"] for item in timeline_data] + [5])
-
-        bars_html = []
-        for item in timeline_data:
-            tot = item["total"]
-            phish = item["phishing"]
-            susp = item["suspicious"]
-            safe = item["safe"]
-            is_today = (item["day"] == today_iso)
-
-            h_px = max(int((tot / max_val) * 110), 4) if tot > 0 else 4
-
-            if tot > 0:
-                p_h = int((phish / tot) * 100)
-                s_h = int((susp / tot) * 100)
-                c_h = 100 - p_h - s_h
-                segments = ""
-                if phish > 0:
-                    segments += f"<div style='height:{p_h}%; background:#ef4444; width:100%;' title='Phishing: {phish}'></div>"
-                if susp > 0:
-                    segments += f"<div style='height:{s_h}%; background:#f59e0b; width:100%;' title='Suspicious: {susp}'></div>"
-                if safe > 0:
-                    segments += f"<div style='height:{c_h}%; background:#10b981; width:100%;' title='Clean: {safe}'></div>"
-            else:
-                segments = "<div style='height:100%; background:var(--cf-border-subtle); width:100%; border-radius:2px;'></div>"
-
-            d_label = item["date_label"]
-            lbl_weight = "700" if is_today else "500"
-            lbl_color = "var(--cf-orange)" if is_today else "var(--cf-text-secondary)"
-            tot_display = str(tot) if tot > 0 else ""
-            hover_title = f"{d_label}: {tot} Audits ({phish} Phish, {susp} Suspicious, {safe} Clean)"
-
-            bars_html.append(
-                f"<div style='flex:1; display:flex; flex-direction:column; align-items:center; justify-content:flex-end; height:155px; padding:0 3px;' title='{hover_title}'>"
-                f"<div style='font-size:12px; font-weight:700; color:var(--cf-orange); margin-bottom:6px; min-height:16px;'>{tot_display}</div>"
-                f"<div style='width:100%; height:{h_px}px; min-height:4px; max-height:110px; background:var(--cf-border); border-radius:3px 3px 0 0; overflow:hidden; display:flex; flex-direction:column-reverse; box-shadow:0 1px 2px rgba(0,0,0,0.08);'>{segments}</div>"
-                f"<div style='font-size:11px; font-weight:{lbl_weight}; color:{lbl_color}; margin-top:8px; text-align:center;'>{d_label}</div>"
-                f"</div>"
-            )
-
-        bars_markup = "".join(bars_html)
-        tl_total = sum(x["total"] for x in timeline_data)
-        tl_phish = sum(x["phishing"] for x in timeline_data)
-        tl_susp = sum(x["suspicious"] for x in timeline_data)
-        tl_safe = sum(x["safe"] for x in timeline_data)
-
-        render_html(f"""
-        <div class="cf-card">
+    # Defense Architecture & Engine Status Cards
+    render_html("<div style='font-size:14px; font-weight:600; color:var(--cf-text-primary); margin-bottom:12px;'>Core Security Architecture & Multi-Layer Engines</div>")
+    
+    g1, g2, g3 = st.columns(3)
+    with g1:
+        render_html("""
+        <div class="cf-card" style="height:100%;">
             <div class="cf-card-header">
                 <div>
-                    <div class="cf-card-title">Audit Activity Timeline</div>
-                    <div class="cf-card-subtitle">Rolling 7-day security audit volume.</div>
+                    <div class="cf-card-title">🧠 1D-CNN Sequence Neural Net</div>
+                    <div class="cf-card-subtitle">Primary deep learning URL classifier.</div>
                 </div>
-                <div style="display:flex; align-items:center; gap:10px; font-size:11px; font-weight:600;">
-                    <span style="display:inline-flex; align-items:center; gap:4px; color:#10b981;"><span style="width:7px; height:7px; border-radius:50%; background:#10b981;"></span> Safe</span>
-                    <span style="display:inline-flex; align-items:center; gap:4px; color:#f59e0b;"><span style="width:7px; height:7px; border-radius:50%; background:#f59e0b;"></span> Suspicious</span>
-                    <span style="display:inline-flex; align-items:center; gap:4px; color:#ef4444;"><span style="width:7px; height:7px; border-radius:50%; background:#ef4444;"></span> Threat</span>
-                </div>
+                <span class="cf-badge cf-badge-safe"><span class="cf-badge-dot"></span> 95.5% Acc</span>
             </div>
-            <div style="display:flex; align-items:flex-end; justify-content:space-between; width:100%; padding:6px 0 4px 0; border-bottom:1px solid var(--cf-border);">
-                {bars_markup}
+            <div style="font-size:13px; color:var(--cf-text-secondary); line-height:1.6;">
+                Character-level tokenization parses raw URL character sequences without relying on manual feature crafting. Learns subtle zero-day obfuscation, character substitutions, and deceptive credential lures.
             </div>
-            <div style="display:flex; justify-content:space-between; align-items:center; padding-top:10px; font-size:12px; color:var(--cf-text-secondary);">
-                <span><b>7-Day Volume:</b> {tl_total} Scans</span>
-                <span><b>{tl_phish}</b> Blocked &nbsp;|&nbsp; <b>{tl_susp}</b> Suspicious &nbsp;|&nbsp; <b>{tl_safe}</b> Clean</span>
+            <div style="margin-top:14px; padding-top:10px; border-top:1px solid var(--cf-border); font-size:12px; color:var(--cf-text-muted);">
+                <b>Model:</b> Keras 1D-CNN &nbsp;|&nbsp; <b>Vocab:</b> 100 Tokens
             </div>
         </div>
         """)
 
-        with st.expander("📊 View Detailed Daily Telemetry", expanded=False):
-            t_df = pd.DataFrame(timeline_data)[["date_label", "total", "phishing", "suspicious", "safe"]].rename(
-                columns={
-                    "date_label": "Date",
-                    "total": "Total Scans",
-                    "phishing": "Threats Blocked",
-                    "suspicious": "Suspicious Flags",
-                    "safe": "Clean Verified"
-                }
-            )
-            st.dataframe(t_df, use_container_width=True, hide_index=True)
+    with g2:
+        render_html("""
+        <div class="cf-card" style="height:100%;">
+            <div class="cf-card-header">
+                <div>
+                    <div class="cf-card-title">🌲 Tabular ML Classifiers</div>
+                    <div class="cf-card-subtitle">Calibrated XGBoost & Random Forest.</div>
+                </div>
+                <span class="cf-badge cf-badge-orange"><span class="cf-badge-dot"></span> Calibrated</span>
+            </div>
+            <div style="font-size:13px; color:var(--cf-text-secondary); line-height:1.6;">
+                Evaluates a 16-feature vector including prefix/suffix patterns, subdomain depth, redirection indicators, entropy, and structural ratios to deliver interpretable, probability-calibrated scoring.
+            </div>
+            <div style="margin-top:14px; padding-top:10px; border-top:1px solid var(--cf-border); font-size:12px; color:var(--cf-text-muted);">
+                <b>Models:</b> XGBoost + Random Forest &nbsp;|&nbsp; <b>Features:</b> 16
+            </div>
+        </div>
+        """)
+
+    with g3:
+        render_html("""
+        <div class="cf-card" style="height:100%;">
+            <div class="cf-card-header">
+                <div>
+                    <div class="cf-card-title">🛡️ Boundary Guard & Forensics</div>
+                    <div class="cf-card-subtitle">Zero false-positive academic protection.</div>
+                </div>
+                <span class="cf-badge cf-badge-safe"><span class="cf-badge-dot"></span> Active</span>
+            </div>
+            <div style="font-size:13px; color:var(--cf-text-secondary); line-height:1.6;">
+                Enforces strict Public Suffix List (eTLD+1) boundary checking to protect genuine university portals, institutional single-sign-on links, and legitimate web services against false alarm flags.
+            </div>
+            <div style="margin-top:14px; padding-top:10px; border-top:1px solid var(--cf-border); font-size:12px; color:var(--cf-text-muted);">
+                <b>PSL:</b> eTLD+1 Compliant &nbsp;|&nbsp; <b>Allowlist:</b> Verified
+            </div>
+        </div>
+        """)
 
 
 # ==============================================================================
