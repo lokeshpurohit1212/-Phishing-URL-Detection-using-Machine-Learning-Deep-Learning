@@ -353,11 +353,17 @@ if menu_choice == "Overview":
             else:
                 segments = "<div style='height:100%; background:var(--cf-border-subtle); width:100%; border-radius:2px;'></div>"
 
+            d_label = item["date_label"]
+            lbl_weight = "700" if is_today else "500"
+            lbl_color = "var(--cf-orange)" if is_today else "var(--cf-text-secondary)"
+            tot_display = str(tot) if tot > 0 else ""
+            hover_title = f"{d_label}: {tot} Audits ({phish} Phish, {susp} Suspicious, {safe} Clean)"
+
             bars_html.append(
-                f"<div style='flex:1; display:flex; flex-direction:column; align-items:center; justify-content:flex-end; height:155px; padding:0 3px;' title='{item[\"date_label\"]}: {tot} Audits ({phish} Phish, {susp} Suspicious, {safe} Clean)'>"
-                f"<div style='font-size:12px; font-weight:700; color:var(--cf-orange); margin-bottom:6px; min-height:16px;'>{tot if tot > 0 else ''}</div>"
+                f"<div style='flex:1; display:flex; flex-direction:column; align-items:center; justify-content:flex-end; height:155px; padding:0 3px;' title='{hover_title}'>"
+                f"<div style='font-size:12px; font-weight:700; color:var(--cf-orange); margin-bottom:6px; min-height:16px;'>{tot_display}</div>"
                 f"<div style='width:100%; height:{h_px}px; min-height:4px; max-height:110px; background:var(--cf-border); border-radius:3px 3px 0 0; overflow:hidden; display:flex; flex-direction:column-reverse; box-shadow:0 1px 2px rgba(0,0,0,0.08);'>{segments}</div>"
-                f"<div style='font-size:11px; font-weight:{\"700\" if is_today else \"500\"}; color:{\"var(--cf-orange)\" if is_today else \"var(--cf-text-secondary)\"}; margin-top:8px; text-align:center;'>{item[\"date_label\"]}</div>"
+                f"<div style='font-size:11px; font-weight:{lbl_weight}; color:{lbl_color}; margin-top:8px; text-align:center;'>{d_label}</div>"
                 f"</div>"
             )
 
