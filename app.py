@@ -4,10 +4,12 @@ FLARESHIELD AI — Cloudflare-Style Cyber Threat Defense & Phishing Detection
 ==============================================================================
 Primary Design Reference: https://dash.cloudflare.com/
 - Compact top navigation and breadcrumb hierarchy
-- Clean left sidebar with non-editable Light / Dark / System segmented control
+- Clean left sidebar with strictly Light / Dark appearance switcher
+- Maximum human-eye visibility with crisp contrast in both Light and Dark modes
 - 7 focused, purposeful routes (Overview, URL Scanner, Email Scanner, Bulk Scan,
   Scan History, Model Evaluation, Settings)
 - Cloudflare Orange (#f38020) accents, 1px neutral borders, restrained shadows
+- Zero raw code blocks / HTML leakage when scanning URLs or emails
 - Evidence-based multi-layer detection: 1D-CNN (95.5% Acc), Calibrated XGBoost,
   PSL (eTLD+1) boundary guard, and Cloudflare Area 1-style email forensics
 ==============================================================================
@@ -30,7 +32,7 @@ from src.config import (
     APP_NAME, APP_SUBTITLE, APP_VERSION,
     GOOGLE_SAFE_BROWSING_KEY, VIRUSTOTAL_API_KEY
 )
-from src.ui.theme import generate_theme_css, get_theme, get_plotly_layout
+from src.ui.theme import generate_theme_css, get_theme, get_plotly_layout, clean_html
 from src.detection.verdict_engine import MultiLayerDetectionEngine
 from src.email_analysis.email_scanner import EmailPhishingScanner
 from src.utils.domain_parser import allowlist_manager, domain_parser
@@ -42,6 +44,17 @@ from src.comparison.brand_comparison import compare_domains
 from src.utils.url_validation import validate_url_input, redact_sensitive_query_params
 from src.inspection.safe_fetcher import safe_fetch_url
 from src.inspection.content_analyzer import analyze_html_content
+
+# ==============================================================================
+# SAFE HTML RENDERING HELPER (PREVENTS COMMONMARK INDENTED CODE BLOCK BUG)
+# ==============================================================================
+def render_html(html_str: str):
+    """
+    Renders HTML safely in Streamlit by stripping leading Python indentation.
+    This guarantees that CommonMark never converts multi-line HTML tags into
+    raw <pre><code> blocks visible on the screen.
+    """
+    st.markdown(clean_html(html_str), unsafe_allow_html=True)
 
 # ==============================================================================
 # PAGE CONFIGURATION
@@ -73,11 +86,10 @@ repo = get_repository()
 email_scanner = get_email_scanner()
 
 # ==============================================================================
-# THEME STATE INITIALIZATION (LIGHT / DARK / SYSTEM)
+# THEME STATE INITIALIZATION (STRICTLY LIGHT / DARK MODE ONLY)
 # ==============================================================================
-THEME_OPTIONS = ["Light", "Dark", "System"]
+THEME_OPTIONS = ["Light", "Dark"]
 
-# Read from URL query params first for persistent reload, then session_state, default to Light
 query_theme = st.query_params.get("theme", None)
 if query_theme in THEME_OPTIONS:
     initial_theme = query_theme
@@ -93,7 +105,7 @@ st.session_state["theme_mode"] = initial_theme
 # ==============================================================================
 with st.sidebar:
     # Cloudflare Dashboard Header Brand
-    st.markdown("""
+    render_html("""
     <div style="display:flex; align-items:center; gap:10px; padding: 4px 0 14px 0; border-bottom: 1px solid var(--cf-border);">
         <div style="background-color:#f38020; color:#ffffff; width:30px; height:30px; border-radius:4px; display:flex; align-items:center; justify-content:center; font-weight:800; font-size:16px;">
             ⚡
@@ -103,9 +115,9 @@ with st.sidebar:
             <div style="font-size:11px; font-weight:500; color:var(--cf-orange); letter-spacing:0.03em; text-transform:uppercase;">Threat Operations</div>
         </div>
     </div>
-    """, unsafe_allow_html=True)
+    """)
 
-    st.markdown("<div style='height:8px;'></div>", unsafe_allow_html=True)
+    render_html("<div style='height:8px;'></div>")
 
     # 7 Exact Required Navigation Routes
     menu_choice = st.radio(
@@ -122,10 +134,10 @@ with st.sidebar:
         label_visibility="collapsed"
     )
 
-    st.markdown("<hr style='margin: 14px 0; border: none; border-top: 1px solid var(--cf-border);'>", unsafe_allow_html=True)
+    render_html("<hr style='margin: 14px 0; border: none; border-top: 1px solid var(--cf-border);'>")
 
-    # Genuine Non-Editable Segmented Theme Selector (Light / Dark / System)
-    st.markdown("<div style='font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.05em; color:var(--cf-text-muted); margin-bottom:6px;'>Appearance</div>", unsafe_allow_html=True)
+    # Strict Light / Dark Appearance Switcher
+    render_html("<div style='font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.05em; color:var(--cf-text-muted); margin-bottom:6px;'>Appearance</div>")
     selected_theme = st.segmented_control(
         "Appearance",
         options=THEME_OPTIONS,
@@ -133,7 +145,6 @@ with st.sidebar:
         label_visibility="collapsed"
     )
 
-    # Sync selection cleanly without losing inputs
     if selected_theme and selected_theme != st.session_state["theme_mode"]:
         st.session_state["theme_mode"] = selected_theme
         st.query_params["theme"] = selected_theme
@@ -141,34 +152,33 @@ with st.sidebar:
 
     current_theme = st.session_state["theme_mode"]
 
-    st.markdown("<hr style='margin: 14px 0; border: none; border-top: 1px solid var(--cf-border);'>", unsafe_allow_html=True)
+    render_html("<hr style='margin: 14px 0; border: none; border-top: 1px solid var(--cf-border);'>")
 
     # Compact Active Defenses Status
-    st.markdown("<div style='font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.05em; color:var(--cf-text-muted); margin-bottom:8px;'>Active Engines</div>", unsafe_allow_html=True)
+    render_html("<div style='font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.05em; color:var(--cf-text-muted); margin-bottom:8px;'>Active Engines</div>")
     cnn_ok = engine.cnn.is_available
     ml_ok = engine.ml.is_available
-    
-    st.markdown(f"<div style='font-size:12px; margin-bottom:4px;'><span style='color:{'#10b981' if cnn_ok else '#ef4444'};'>●</span> 1D-CNN URL Classifier: <b>{'Online' if cnn_ok else 'Offline'}</b></div>", unsafe_allow_html=True)
-    st.markdown(f"<div style='font-size:12px; margin-bottom:4px;'><span style='color:{'#10b981' if ml_ok else '#ef4444'};'>●</span> Calibrated XGBoost: <b>{'Online' if ml_ok else 'Offline'}</b></div>", unsafe_allow_html=True)
-    st.markdown("<div style='font-size:12px; margin-bottom:4px;'><span style='color:#10b981;'>●</span> Email Forensics: <b>Active</b></div>", unsafe_allow_html=True)
-    st.markdown("<div style='font-size:12px; margin-bottom:4px;'><span style='color:#10b981;'>●</span> Public Suffix Boundary: <b>Active</b></div>", unsafe_allow_html=True)
-    st.markdown("<div style='font-size:12px; margin-bottom:4px;'><span style='color:#10b981;'>●</span> SSRF Sandbox: <b>Enforced</b></div>", unsafe_allow_html=True)
-    st.markdown(f"<div style='font-size:12px;'><span style='color:{'#10b981' if (GOOGLE_SAFE_BROWSING_KEY or VIRUSTOTAL_API_KEY) else '#f59e0b'};'>●</span> Threat Feeds: <b>{'API Active' if (GOOGLE_SAFE_BROWSING_KEY or VIRUSTOTAL_API_KEY) else 'Local Signatures'}</b></div>", unsafe_allow_html=True)
 
-    st.markdown("<hr style='margin: 14px 0; border: none; border-top: 1px solid var(--cf-border);'>", unsafe_allow_html=True)
+    render_html(f"<div style='font-size:12px; margin-bottom:4px;'><span style='color:{'#10b981' if cnn_ok else '#ef4444'};'>●</span> 1D-CNN URL Classifier: <b>{'Online' if cnn_ok else 'Offline'}</b></div>")
+    render_html(f"<div style='font-size:12px; margin-bottom:4px;'><span style='color:{'#10b981' if ml_ok else '#ef4444'};'>●</span> Calibrated XGBoost: <b>{'Online' if ml_ok else 'Offline'}</b></div>")
+    render_html("<div style='font-size:12px; margin-bottom:4px;'><span style='color:#10b981;'>●</span> Email Forensics: <b>Active</b></div>")
+    render_html("<div style='font-size:12px; margin-bottom:4px;'><span style='color:#10b981;'>●</span> Public Suffix Boundary: <b>Active</b></div>")
+    render_html("<div style='font-size:12px; margin-bottom:4px;'><span style='color:#10b981;'>●</span> SSRF Sandbox: <b>Enforced</b></div>")
+    render_html(f"<div style='font-size:12px;'><span style='color:{'#10b981' if (GOOGLE_SAFE_BROWSING_KEY or VIRUSTOTAL_API_KEY) else '#f59e0b'};'>●</span> Threat Feeds: <b>{'API Active' if (GOOGLE_SAFE_BROWSING_KEY or VIRUSTOTAL_API_KEY) else 'Local Signatures'}</b></div>")
+
+    render_html("<hr style='margin: 14px 0; border: none; border-top: 1px solid var(--cf-border);'>")
     st.caption("FlareShield Security Dashboard v2.5.0")
     st.caption("Cloudflare Enterprise Design Reference")
 
 # Inject centralized dynamic theme stylesheet
-st.markdown(generate_theme_css(current_theme), unsafe_allow_html=True)
+render_html(generate_theme_css(current_theme))
 
 
 # ==============================================================================
 # ROUTE 1: OVERVIEW
 # ==============================================================================
 if menu_choice == "Overview":
-    # Cloudflare Breadcrumbs & Header
-    st.markdown("""
+    render_html("""
     <div style="font-size:12px; color:var(--cf-text-muted); margin-bottom:4px;">
         Account Home &nbsp;/&nbsp; FlareShield Threat Operations &nbsp;/&nbsp; <b>Overview</b>
     </div>
@@ -186,10 +196,10 @@ if menu_choice == "Overview":
             <span class="cf-badge cf-badge-safe"><span class="cf-badge-dot"></span> System Operational</span>
         </div>
     </div>
-    """, unsafe_allow_html=True)
+    """)
 
-    # Prominent Scanner Panel
-    st.markdown("""
+    # Prominent Quick Scan Panel
+    render_html("""
     <div class="cf-card">
         <div class="cf-card-header">
             <div>
@@ -201,7 +211,7 @@ if menu_choice == "Overview":
             </div>
         </div>
     </div>
-    """, unsafe_allow_html=True)
+    """)
 
     q_col1, q_col2 = st.columns([4, 1])
     with q_col1:
@@ -224,7 +234,7 @@ if menu_choice == "Overview":
 
             b_class = "cf-badge-danger" if res["verdict_badge"] == "CRITICAL_PHISHING" else ("cf-badge-warning" if res["verdict_badge"] == "SUSPICIOUS" else "cf-badge-safe")
             
-            st.markdown(f"""
+            render_html(f"""
             <div class="cf-card" style="margin-top:10px;">
                 <div style="display:flex; justify-content:space-between; align-items:center;">
                     <div>
@@ -238,11 +248,11 @@ if menu_choice == "Overview":
                     </div>
                 </div>
             </div>
-            """, unsafe_allow_html=True)
+            """)
 
     # Genuine Scan Statistics Row (From SQLite)
     stats = repo.get_scan_statistics()
-    st.markdown("<div style='height:4px;'></div>", unsafe_allow_html=True)
+    render_html("<div style='height:4px;'></div>")
     
     m1, m2, m3, m4, m5 = st.columns(5)
     with m1: st.metric("Total Audits", stats["total_scans"])
@@ -251,21 +261,12 @@ if menu_choice == "Overview":
     with m4: st.metric("Clean Verified", stats["safe_count"])
     with m5: st.metric("Avg Threat Score", f"{stats['avg_risk_score']:.0f} / 100")
 
-    st.markdown("<div style='height:12px;'></div>", unsafe_allow_html=True)
+    render_html("<div style='height:12px;'></div>")
 
     # Recent Scans Table & Activity Timeline
     left_col, right_col = st.columns([3, 2])
 
     with left_col:
-        st.markdown("""
-        <div class="cf-card">
-            <div class="cf-card-header">
-                <div>
-                    <div class="cf-card-title">Recent Security Audits</div>
-                    <div class="cf-card-subtitle">Real-time scan records stored in local SQLite database.</div>
-                </div>
-            </div>
-        """, unsafe_allow_html=True)
         recent_records = repo.get_recent_scans(limit=5)
         if recent_records:
             t_rows = ""
@@ -280,27 +281,41 @@ if menu_choice == "Overview":
                     <td style="color:var(--cf-text-muted); font-size:12px;">{r['timestamp'][:16]}</td>
                 </tr>
                 """
-            st.markdown(f"""
-            <table class="cf-table">
-                <thead>
-                    <tr>
-                        <th>Audited URL</th>
-                        <th>Classification</th>
-                        <th>Score</th>
-                        <th>Timestamp</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {t_rows}
-                </tbody>
-            </table>
-            """, unsafe_allow_html=True)
+            render_html(f"""
+            <div class="cf-card">
+                <div class="cf-card-header">
+                    <div>
+                        <div class="cf-card-title">Recent Security Audits</div>
+                        <div class="cf-card-subtitle">Real-time scan records stored in local SQLite database.</div>
+                    </div>
+                </div>
+                <table class="cf-table">
+                    <thead>
+                        <tr>
+                            <th>Audited URL</th>
+                            <th>Classification</th>
+                            <th>Score</th>
+                            <th>Timestamp</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {t_rows}
+                    </tbody>
+                </table>
+            </div>
+            """)
         else:
-            st.info("No security audits recorded yet. Enter a URL above to perform your first scan.")
-        st.markdown("</div>", unsafe_allow_html=True)
+            render_html("""
+            <div class="cf-card">
+                <div class="cf-card-header">
+                    <div class="cf-card-title">Recent Security Audits</div>
+                </div>
+                <div style="color:var(--cf-text-secondary); font-size:13px; padding:10px 0;">No security audits recorded yet. Enter a URL above to perform your first scan.</div>
+            </div>
+            """)
 
     with right_col:
-        st.markdown("""
+        render_html("""
         <div class="cf-card">
             <div class="cf-card-header">
                 <div>
@@ -308,20 +323,20 @@ if menu_choice == "Overview":
                     <div class="cf-card-subtitle">Historical scanning volume over time.</div>
                 </div>
             </div>
-        """, unsafe_allow_html=True)
+        </div>
+        """)
         if stats["timeline"]:
             t_df = pd.DataFrame(stats["timeline"]).set_index("day")
             st.bar_chart(t_df, color="#f38020", height=200)
         else:
             st.caption("Daily timeline chart accumulates as security scans are executed.")
-        st.markdown("</div>", unsafe_allow_html=True)
 
 
 # ==============================================================================
 # ROUTE 2: URL SCANNER (PRIMARY SCANNER)
 # ==============================================================================
 elif menu_choice == "URL Scanner":
-    st.markdown("""
+    render_html("""
     <div style="font-size:12px; color:var(--cf-text-muted); margin-bottom:4px;">
         Threat Defense &nbsp;/&nbsp; <b>URL Scanner</b>
     </div>
@@ -336,10 +351,10 @@ elif menu_choice == "URL Scanner":
             </div>
         </div>
     </div>
-    """, unsafe_allow_html=True)
+    """)
 
     # One-Click Test Samples Row
-    st.markdown("<div style='font-size:12px; font-weight:600; color:var(--cf-text-secondary); margin-bottom:6px;'>DEMONSTRATION TEST SAMPLES:</div>", unsafe_allow_html=True)
+    render_html("<div style='font-size:12px; font-weight:600; color:var(--cf-text-secondary); margin-bottom:6px;'>DEMONSTRATION TEST SAMPLES:</div>")
     tb1, tb2, tb3, tb4, tb5 = st.columns(5)
     with tb1:
         if st.button("🎓 Stanford Portal (Clean)", use_container_width=True):
@@ -408,8 +423,8 @@ elif menu_choice == "URL Scanner":
                 badge_class = "cf-badge-safe"
                 dot_c = "var(--cf-safe-dot)"
 
-            # Results Section: Top Verdict Card
-            st.markdown(f"""
+            # Results Section: Top Verdict Card (Rendered cleanly without code leakage)
+            render_html(f"""
             <div class="cf-card" style="border-left: 5px solid {dot_c}; margin-top:16px;">
                 <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;">
                     <div>
@@ -425,7 +440,7 @@ elif menu_choice == "URL Scanner":
                     </div>
                 </div>
             </div>
-            """, unsafe_allow_html=True)
+            """)
 
             # Quantitative Metrics Row
             sm1, sm2, sm3, sm4 = st.columns(4)
@@ -457,12 +472,12 @@ elif menu_choice == "URL Scanner":
                         b_type = "cf-badge-neutral"
                         b_text = "SKIPPED"
 
-                    st.markdown(f"""
+                    render_html(f"""
                     <div class="cf-card" style="padding:12px; text-align:center;">
                         <div style="font-size:12px; font-weight:600; color:var(--cf-text-primary); margin-bottom:6px;">{eng_name.replace('_', ' ').title()}</div>
                         <span class="cf-badge {b_type}"><span class="cf-badge-dot"></span> {b_text}</span>
                     </div>
-                    """, unsafe_allow_html=True)
+                    """)
 
             # Detailed Observed Findings Panel
             st.markdown("### 📋 Detailed Observed Findings")
@@ -470,23 +485,38 @@ elif menu_choice == "URL Scanner":
             if findings:
                 for f in findings:
                     sev = f.get("severity", "INFO")
-                    st.markdown(f"""
+                    sev_class = 'cf-badge-danger' if sev in ('CRITICAL', 'HIGH') else ('cf-badge-warning' if sev == 'MEDIUM' else 'cf-badge-safe')
+                    render_html(f"""
                     <div class="cf-finding-box {sev}">
                         <div style="display:flex; justify-content:space-between; align-items:center;">
                             <span style="font-weight:600; color:var(--cf-text-primary); font-size:14px;">{f['name']}</span>
-                            <span class="cf-badge {'cf-badge-danger' if sev in ('CRITICAL', 'HIGH') else ('cf-badge-warning' if sev == 'MEDIUM' else 'cf-badge-safe')}">{sev}</span>
+                            <span class="cf-badge {sev_class}">{sev}</span>
                         </div>
                         <div style="color:var(--cf-text-secondary); font-size:13px; margin-top:4px;"><b>Evidence:</b> {f['evidence']}</div>
                         <div style="color:var(--cf-text-muted); font-size:12px; margin-top:2px;"><b>Analysis:</b> {f['explanation']}</div>
                         <div style="color:var(--cf-orange); font-size:11px; margin-top:4px;"><b>Source:</b> {f['source']} &nbsp;|&nbsp; <b>Action:</b> {f['action']}</div>
                     </div>
-                    """, unsafe_allow_html=True)
+                    """)
             else:
                 st.info("No adverse security signals, deceptive character substitutions, or brand impersonation detected.")
 
-            # Expandable Technical Details
-            with st.expander("🧩 Public Suffix List & Structural Components"):
-                st.json(scan_res["components"])
+            # Public Suffix List & Structural Components (Clean Table instead of raw code/json)
+            with st.expander("🧩 Public Suffix List & Structural Components", expanded=False):
+                comp = scan_res.get("components", {})
+                c_rows = "".join([f"<tr><td style='font-weight:600; width:35%;'>{k.replace('_', ' ').title()}</td><td><code class='mono'>{v if v is not None else 'None'}</code></td></tr>" for k, v in comp.items()])
+                render_html(f"""
+                <table class="cf-table">
+                    <thead>
+                        <tr>
+                            <th>Structural Attribute</th>
+                            <th>Extracted Value</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {c_rows}
+                    </tbody>
+                </table>
+                """)
 
             # Recommended Actions
             st.markdown("### 🛡️ Recommended Incident Response")
@@ -526,7 +556,7 @@ elif menu_choice == "URL Scanner":
 # ROUTE 3: EMAIL SCANNER
 # ==============================================================================
 elif menu_choice == "Email Scanner":
-    st.markdown("""
+    render_html("""
     <div style="font-size:12px; color:var(--cf-text-muted); margin-bottom:4px;">
         Area 1 Security &nbsp;/&nbsp; <b>Email Scanner</b>
     </div>
@@ -541,10 +571,10 @@ elif menu_choice == "Email Scanner":
             </div>
         </div>
     </div>
-    """, unsafe_allow_html=True)
+    """)
 
     # Sample Demonstrations
-    st.markdown("<div style='font-size:12px; font-weight:600; color:var(--cf-text-secondary); margin-bottom:6px;'>DEMONSTRATION EMAIL SAMPLES:</div>", unsafe_allow_html=True)
+    render_html("<div style='font-size:12px; font-weight:600; color:var(--cf-text-secondary); margin-bottom:6px;'>DEMONSTRATION EMAIL SAMPLES:</div>")
     es1, es2, es3 = st.columns(3)
     with es1:
         if st.button("🚨 IT Helpdesk Impersonation (Phishing)", use_container_width=True):
@@ -629,7 +659,7 @@ Office of the University Registrar"""
             b_type = "cf-badge-danger" if v_badge == "CRITICAL_PHISHING" else ("cf-badge-warning" if v_badge == "SUSPICIOUS" else "cf-badge-safe")
             dot_color = "var(--cf-phish-dot)" if v_score >= 70 else ("var(--cf-susp-dot)" if v_score >= 40 else "var(--cf-safe-dot)")
 
-            st.markdown(f"""
+            render_html(f"""
             <div class="cf-card" style="border-left: 5px solid {dot_color}; margin-top:16px;">
                 <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;">
                     <div>
@@ -645,7 +675,7 @@ Office of the University Registrar"""
                     </div>
                 </div>
             </div>
-            """, unsafe_allow_html=True)
+            """)
 
             em1, em2, em3, em4 = st.columns(4)
             with em1: st.metric("Observed Flags", len(e_res["findings"]))
@@ -659,17 +689,18 @@ Office of the University Registrar"""
             if e_res["findings"]:
                 for f in e_res["findings"]:
                     sev = f.get("severity", "INFO")
-                    st.markdown(f"""
+                    sev_class = 'cf-badge-danger' if sev in ('CRITICAL', 'HIGH') else ('cf-badge-warning' if sev == 'MEDIUM' else 'cf-badge-safe')
+                    render_html(f"""
                     <div class="cf-finding-box {sev}">
                         <div style="display:flex; justify-content:space-between; align-items:center;">
                             <span style="font-weight:600; color:var(--cf-text-primary); font-size:14px;">{f['name']}</span>
-                            <span class="cf-badge {'cf-badge-danger' if sev in ('CRITICAL', 'HIGH') else ('cf-badge-warning' if sev == 'MEDIUM' else 'cf-badge-safe')}">{sev}</span>
+                            <span class="cf-badge {sev_class}">{sev}</span>
                         </div>
                         <div style="color:var(--cf-text-secondary); font-size:13px; margin-top:4px;"><b>Evidence:</b> {f['evidence']}</div>
                         <div style="color:var(--cf-text-muted); font-size:12px; margin-top:2px;"><b>Analysis:</b> {f['explanation']}</div>
                         <div style="color:var(--cf-orange); font-size:11px; margin-top:4px;"><b>Source:</b> {f['source']} &nbsp;|&nbsp; <b>Action:</b> {f['action']}</div>
                     </div>
-                    """, unsafe_allow_html=True)
+                    """)
             else:
                 st.info("No impersonation signals, authentication failures, or urgency lures detected.")
 
@@ -684,15 +715,30 @@ Office of the University Registrar"""
             else:
                 st.caption("No external hyperlinks found inside message body.")
 
-            with st.expander("📬 RFC-822 Extracted Headers"):
-                st.json(e_res["headers"])
+            # RFC-822 Extracted Headers (Clean Table instead of raw code/json)
+            with st.expander("📬 RFC-822 Extracted Headers", expanded=False):
+                headers = e_res.get("headers", {})
+                h_rows = "".join([f"<tr><td style='font-weight:600; width:30%;'>{k}</td><td><code class='mono'>{v}</code></td></tr>" for k, v in headers.items()])
+                render_html(f"""
+                <table class="cf-table">
+                    <thead>
+                        <tr>
+                            <th>Header Name</th>
+                            <th>Header Content</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {h_rows}
+                    </tbody>
+                </table>
+                """)
 
 
 # ==============================================================================
 # ROUTE 4: BULK SCAN
 # ==============================================================================
 elif menu_choice == "Bulk Scan":
-    st.markdown("""
+    render_html("""
     <div style="font-size:12px; color:var(--cf-text-muted); margin-bottom:4px;">
         Threat Defense &nbsp;/&nbsp; <b>Bulk Scan</b>
     </div>
@@ -707,7 +753,7 @@ elif menu_choice == "Bulk Scan":
             </div>
         </div>
     </div>
-    """, unsafe_allow_html=True)
+    """)
 
     tab_file, tab_paste = st.tabs(["📂 File Upload (CSV/TXT)", "✍️ Paste Multiple URLs"])
     raw_candidates = []
@@ -784,7 +830,7 @@ elif menu_choice == "Bulk Scan":
 # ROUTE 5: SCAN HISTORY
 # ==============================================================================
 elif menu_choice == "Scan History":
-    st.markdown("""
+    render_html("""
     <div style="font-size:12px; color:var(--cf-text-muted); margin-bottom:4px;">
         Audit Logs &nbsp;/&nbsp; <b>Scan History</b>
     </div>
@@ -799,7 +845,7 @@ elif menu_choice == "Scan History":
             </div>
         </div>
     </div>
-    """, unsafe_allow_html=True)
+    """)
 
     f1, f2, f3 = st.columns([2, 2, 1])
     with f1: search_kw = st.text_input("Filter by URL / Domain:", placeholder="e.g. stanford.edu")
@@ -831,7 +877,7 @@ elif menu_choice == "Scan History":
 # ROUTE 6: MODEL EVALUATION
 # ==============================================================================
 elif menu_choice == "Model Evaluation":
-    st.markdown("""
+    render_html("""
     <div style="font-size:12px; color:var(--cf-text-muted); margin-bottom:4px;">
         Intelligence &nbsp;/&nbsp; <b>Model Evaluation</b>
     </div>
@@ -846,7 +892,7 @@ elif menu_choice == "Model Evaluation":
             </div>
         </div>
     </div>
-    """, unsafe_allow_html=True)
+    """)
 
     metrics_path = os.path.join(BASE_DIR, "models", "model_metrics.json")
     if os.path.exists(metrics_path):
@@ -893,7 +939,7 @@ elif menu_choice == "Model Evaluation":
 # ROUTE 7: SETTINGS
 # ==============================================================================
 elif menu_choice == "Settings":
-    st.markdown("""
+    render_html("""
     <div style="font-size:12px; color:var(--cf-text-muted); margin-bottom:4px;">
         System &nbsp;/&nbsp; <b>Settings</b>
     </div>
@@ -908,7 +954,7 @@ elif menu_choice == "Settings":
             </div>
         </div>
     </div>
-    """, unsafe_allow_html=True)
+    """)
 
     st.markdown("### 🏛️ Verified Institutional Allowlist Management")
     st.markdown("""
@@ -936,7 +982,7 @@ elif menu_choice == "Settings":
             else:
                 st.warning("Domain is already allowlisted or invalid.")
 
-        st.markdown("<br>", unsafe_allow_html=True)
+        render_html("<br>")
         st.markdown("**Remove Trusted Domain:**")
         rem_d = st.selectbox("Select domain to remove:", ["-- Select --"] + current_allowlist)
         if st.button("Remove Domain") and rem_d != "-- Select --":
@@ -945,7 +991,7 @@ elif menu_choice == "Settings":
                 st.success(f"Removed '{rem_d}' from allowlist.")
                 st.rerun()
 
-    st.markdown("<hr style='margin: 24px 0; border: none; border-top: 1px solid var(--cf-border);'>", unsafe_allow_html=True)
+    render_html("<hr style='margin: 24px 0; border: none; border-top: 1px solid var(--cf-border);'>")
 
     st.markdown("### 🔑 Threat Intelligence API Keys")
     st.markdown("""
