@@ -1,0 +1,20 @@
+# Core Web Framework
+streamlit>=1.30.0
+
+# Deep Learning & Machine Learning
+tensorflow>=2.15.0
+keras>=3.0.0
+scikit-learn>=1.4.0
+xgboost>=2.0.0
+numpy>=1.24.0
+pandas>=2.1.0
+
+# Network, DNS & URL Intelligence
+requests>=2.31.0
+beautifulsoup4>=4.12.0
+dnspython>=2.6.0
+tldextract>=5.1.0
+python-dotenv>=1.0.0
+
+# Testing & Utilities
+pytest>=8.0.0

@@ -1,0 +1,100 @@
+{
+  "dataset": {
+    "source": "Balanced PhishTank Verified & Representative Institutional/Commercial Corpus",
+    "total_samples": 5000,
+    "train_samples": 4000,
+    "test_samples": 1000,
+    "features": [
+      "Have_IP",
+      "Have_At",
+      "URL_Length",
+      "URL_Depth",
+      "Redirection",
+      "https_Domain",
+      "TinyURL",
+      "Prefix/Suffix",
+      "DNS_Record",
+      "Web_Traffic",
+      "Domain_Age",
+      "Domain_End",
+      "iFrame",
+      "Mouse_Over",
+      "Right_Click",
+      "Web_Forwards"
+    ]
+  },
+  "models": {
+    "xgboost": {
+      "name": "Calibrated XGBoost Classifier",
+      "metrics": {
+        "accuracy": 0.717,
+        "precision": 0.6948,
+        "recall": 0.774,
+        "f1_score": 0.7323,
+        "roc_auc": 0.7889,
+        "brier_score": 0.1804,
+        "false_positive_rate": 0.34,
+        "confusion_matrix": {
+          "true_negative": 330,
+          "false_positive": 170,
+          "false_negative": 113,
+          "true_positive": 387
+        }
+      },
+      "feature_importance": {
+        "Prefix/Suffix": 0.4893,
+        "URL_Length": 0.266,
+        "URL_Depth": 0.1694,
+        "Have_IP": 0.0365,
+        "Have_At": 0.0271,
+        "TinyURL": 0.0116,
+        "Redirection": 0.0,
+        "https_Domain": 0.0,
+        "DNS_Record": 0.0,
+        "Web_Traffic": 0.0,
+        "Domain_Age": 0.0,
+        "Domain_End": 0.0,
+        "iFrame": 0.0,
+        "Mouse_Over": 0.0,
+        "Right_Click": 0.0,
+        "Web_Forwards": 0.0
+      }
+    },
+    "random_forest": {
+      "name": "Calibrated Random Forest",
+      "metrics": {
+        "accuracy": 0.721,
+        "precision": 0.8623,
+        "recall": 0.526,
+        "f1_score": 0.6534,
+        "roc_auc": 0.7965,
+        "brier_score": 0.1783,
+        "confusion_matrix": {
+          "true_negative": 458,
+          "false_positive": 42,
+          "false_negative": 237,
+          "true_positive": 263
+        }
+      }
+    },
+    "cnn_deep_learning": {
+      "name": "1D-CNN Sequence Neural Network",
+      "metrics": {
+        "accuracy": 0.955,
+        "precision": 0.9452,
+        "recall": 0.966,
+        "f1_score": 0.9555,
+        "roc_auc": 0.9881,
+        "brier_score": 0.0371,
+        "false_positive_rate": 0.056,
+        "confusion_matrix": {
+          "true_negative": 472,
+          "false_positive": 28,
+          "false_negative": 17,
+          "true_positive": 483
+        }
+      },
+      "architecture": "Embedding(100, 32) -> Conv1D(64, 5) -> GlobalMaxPool -> Dense(64) -> Dropout(0.5) -> Sigmoid"
+    }
+  }
+}
