@@ -60,7 +60,12 @@ TRUSTED_DOMAINS = [
     "google.com", "github.com", "youtube.com", "microsoft.com",
     "facebook.com", "amazon.com", "paypal.com", "apple.com",
     "stackoverflow.com", "wikipedia.org", "linkedin.com", "netflix.com",
-    "twitter.com", "instagram.com", "openai.com", "cloudflare.com"
+    "twitter.com", "x.com", "instagram.com", "openai.com", "cloudflare.com",
+    "chatgpt.com", "whatsapp.com", "telegram.org", "reddit.com",
+    "yahoo.com", "zoom.us", "dropbox.com", "spotify.com", "adobe.com",
+    "salesforce.com", "medium.com", "quora.com", "twitch.tv", "canva.com",
+    "notion.so", "slack.com", "figma.com", "utorrent.com", "github.io",
+    "gitlab.com", "bitbucket.org", "archive.org", "wikimedia.org"
 ]
 
 # Suspicious keywords commonly seen in phishing paths/subdomains
