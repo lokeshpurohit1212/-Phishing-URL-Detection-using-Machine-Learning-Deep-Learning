@@ -40,7 +40,7 @@ except ImportError:
     def clean_html(html_str: str) -> str:
         if not html_str:
             return ""
-        return textwrap.dedent(html_str).strip()
+        return "\n".join(line.strip() for line in html_str.splitlines()).strip()
 
 from src.detection.verdict_engine import MultiLayerDetectionEngine
 from src.email_analysis.email_scanner import EmailPhishingScanner
@@ -278,18 +278,19 @@ if menu_choice == "Overview":
     with left_col:
         recent_records = repo.get_recent_scans(limit=5)
         if recent_records:
-            t_rows = ""
+            t_rows = []
             for r in recent_records:
                 v = r['verdict']
                 b_c = "cf-badge-danger" if "PHISHING" in v.upper() else ("cf-badge-warning" if "SUSPICIOUS" in v.upper() else "cf-badge-safe")
-                t_rows += f"""
-                <tr>
-                    <td><code class="mono" style="font-size:12px;">{r['redacted_url'][:36]}...</code></td>
-                    <td><span class="cf-badge {b_c}"><span class="cf-badge-dot"></span> {v}</span></td>
-                    <td><b>{r['risk_score']}/100</b></td>
-                    <td style="color:var(--cf-text-muted); font-size:12px;">{r['timestamp'][:16]}</td>
-                </tr>
-                """
+                t_rows.append(
+                    f"<tr>"
+                    f"<td><code class=\"mono\" style=\"font-size:12px;\">{r['redacted_url'][:36]}...</code></td>"
+                    f"<td><span class=\"cf-badge {b_c}\"><span class=\"cf-badge-dot\"></span> {v}</span></td>"
+                    f"<td><b>{r['risk_score']}/100</b></td>"
+                    f"<td style=\"color:var(--cf-text-muted); font-size:12px;\">{r['timestamp'][:16]}</td>"
+                    f"</tr>"
+                )
+            rows_html = "".join(t_rows)
             render_html(f"""
             <div class="cf-card">
                 <div class="cf-card-header">
@@ -308,7 +309,7 @@ if menu_choice == "Overview":
                         </tr>
                     </thead>
                     <tbody>
-                        {t_rows}
+                        {rows_html}
                     </tbody>
                 </table>
             </div>
@@ -335,8 +336,11 @@ if menu_choice == "Overview":
         </div>
         """)
         if stats["timeline"]:
-            t_df = pd.DataFrame(stats["timeline"]).set_index("day")
-            st.bar_chart(t_df, color="#f38020", height=200)
+            t_df = pd.DataFrame(stats["timeline"]).rename(
+                columns={"total": "Total Scans", "phishing": "Threats Blocked"}
+            ).set_index("day")
+            # 2 columns match 2 colors: Orange for Total Scans, Red for Threats Blocked
+            st.bar_chart(t_df, color=["#f38020", "#ef4444"], height=200)
         else:
             st.caption("Daily timeline chart accumulates as security scans are executed.")
 

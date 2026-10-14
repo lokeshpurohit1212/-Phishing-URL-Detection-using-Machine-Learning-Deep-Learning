@@ -102,12 +102,14 @@ CLOUDFLARE_PALETTES = {
 
 def clean_html(html_str: str) -> str:
     """
-    Dedents and strips an HTML string to ensure Markdown parsers (like CommonMark in Streamlit)
-    never interpret leading 4-space indentations as an indented code block (<pre><code>).
+    Strips leading and trailing whitespace from every line of an HTML string,
+    and strips leading/trailing blank lines.
+    This guarantees that CommonMark NEVER sees 4 or more leading spaces on ANY line,
+    completely preventing HTML tags from ever being interpreted as an indented code block (<pre><code>).
     """
     if not html_str:
         return ""
-    return textwrap.dedent(html_str).strip()
+    return "\n".join(line.strip() for line in html_str.splitlines()).strip()
 
 def get_theme(theme_name: str = "light") -> Dict[str, Any]:
     """Returns palette tokens for chosen theme mode (strictly 'light' or 'dark')."""
