@@ -45,4 +45,4 @@ def test_verdict_engine_thresholds_and_aggregation():
     # Known phishing-style URL
     res_phish = engine.scan_url("http://192.168.1.100/login", include_dns=False, include_tls=False, include_threat_intel=False)
     assert res_phish["risk_score"] >= 40
-    assert res_phish["verdict"] in ("Likely Phishing", "Suspicious — Further Verification Recommended")
+    assert res_phish["verdict"] in ("Likely Phishing", "Suspicious", "Suspicious — Further Verification Recommended")

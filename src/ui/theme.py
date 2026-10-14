@@ -1,45 +1,42 @@
 """
 Cloudflare Enterprise Design System & Centralized Theme Provider.
-Provides precise, authentic Cloudflare-inspired design tokens and CSS overrides
-for both Light Mode ('Cloudflare Light') and Dark Mode ('Cloudflare Dark').
+Provides authoritative design tokens and unified CSS overrides supporting:
+- Light Mode ('Light')
+- Dark Mode ('Dark')
+- System Preference Mode ('System' via @media (prefers-color-scheme: dark))
 
 Key Cloudflare Visual Principles:
 - Signature Cloudflare Orange accent (#f38020 / #f6821f)
 - Clean, crisp white & light-gray surfaces in light mode (#ffffff, #f3f4f6, #f9fafb)
 - Deep charcoal & dark-gray surfaces in dark mode (#111827, #1f2937, #283548)
 - Restrained 1px borders (#e5e7eb in light, #374151 in dark)
-- Clean rectangular border-radius (5px-6px), no bubble/pill distortions
+- Clean rectangular border-radius (4px-6px), no oversized bubble borders
 - Subtle 1px elevation shadows, zero neon glow, zero purple gradients
 - High-contrast, enterprise-grade typography with monospace code elements
 """
 
 from typing import Dict, Any
 
-CLOUDFLARE_THEMES = {
+CLOUDFLARE_PALETTES = {
     "light": {
-        "name": "Cloudflare Light",
-        "icon": "☀️",
         "bg_page": "#f3f4f6",
         "bg_surface": "#ffffff",
         "bg_surface_alt": "#f9fafb",
         "bg_surface_hover": "#f3f4f6",
         "bg_sidebar": "#ffffff",
+        "bg_header": "#ffffff",
         "border": "#e5e7eb",
         "border_subtle": "#f3f4f6",
         "border_strong": "#d1d5db",
         "border_focus": "#f38020",
         "text_primary": "#111827",
         "text_secondary": "#4b5563",
-        "text_muted": "#9ca3af",
-        "text_inverse": "#ffffff",
+        "text_muted": "#6b7280",
         "accent_orange": "#f38020",
         "accent_orange_hover": "#e56f10",
         "accent_orange_light": "#fff7ed",
         "accent_orange_border": "#fed7aa",
         "accent_blue": "#0051c3",
-        "accent_blue_hover": "#003b8e",
-        "accent_blue_light": "#eff6ff",
-        "accent_blue_border": "#bfdbfe",
         "status_safe_bg": "#ecfdf5",
         "status_safe_border": "#a7f3d0",
         "status_safe_text": "#065f46",
@@ -62,13 +59,12 @@ CLOUDFLARE_THEMES = {
         "chart_text": "#4b5563",
     },
     "dark": {
-        "name": "Cloudflare Dark",
-        "icon": "🌙",
         "bg_page": "#111827",
         "bg_surface": "#1f2937",
-        "bg_surface_alt": "#17202f",
+        "bg_surface_alt": "#182234",
         "bg_surface_hover": "#283548",
         "bg_sidebar": "#111827",
+        "bg_header": "#111827",
         "border": "#374151",
         "border_subtle": "#1f2937",
         "border_strong": "#4b5563",
@@ -76,15 +72,11 @@ CLOUDFLARE_THEMES = {
         "text_primary": "#f9fafb",
         "text_secondary": "#d1d5db",
         "text_muted": "#9ca3af",
-        "text_inverse": "#111827",
         "accent_orange": "#f38020",
         "accent_orange_hover": "#faad3f",
-        "accent_orange_light": "rgba(243, 128, 32, 0.12)",
+        "accent_orange_light": "rgba(243, 128, 32, 0.15)",
         "accent_orange_border": "rgba(243, 128, 32, 0.35)",
         "accent_blue": "#3b82f6",
-        "accent_blue_hover": "#60a5fa",
-        "accent_blue_light": "rgba(59, 130, 246, 0.12)",
-        "accent_blue_border": "rgba(59, 130, 246, 0.35)",
         "status_safe_bg": "rgba(16, 185, 129, 0.15)",
         "status_safe_border": "rgba(16, 185, 129, 0.35)",
         "status_safe_text": "#34d399",
@@ -109,64 +101,84 @@ CLOUDFLARE_THEMES = {
 }
 
 def get_theme(theme_name: str = "light") -> Dict[str, Any]:
-    """Returns palette tokens for chosen theme mode (defaulting to light as Cloudflare reference)."""
-    mode = theme_name.lower().strip()
-    if mode not in CLOUDFLARE_THEMES:
-        mode = "light"
-    return CLOUDFLARE_THEMES[mode]
+    """Returns palette tokens for chosen theme mode ('light', 'dark', or fallback)."""
+    mode = str(theme_name).lower().strip()
+    if mode in ("dark", "🌙 cloudflare dark"):
+        return CLOUDFLARE_PALETTES["dark"]
+    return CLOUDFLARE_PALETTES["light"]
 
-def generate_theme_css(theme_name: str = "light") -> str:
+def _css_vars_block(p: Dict[str, Any]) -> str:
+    """Generates CSS variable assignments for a given palette dict."""
+    return f"""
+    --cf-bg-page: {p['bg_page']};
+    --cf-bg-surface: {p['bg_surface']};
+    --cf-bg-surface-alt: {p['bg_surface_alt']};
+    --cf-bg-surface-hover: {p['bg_surface_hover']};
+    --cf-bg-sidebar: {p['bg_sidebar']};
+    --cf-bg-header: {p['bg_header']};
+    --cf-border: {p['border']};
+    --cf-border-subtle: {p['border_subtle']};
+    --cf-border-strong: {p['border_strong']};
+    --cf-border-focus: {p['border_focus']};
+    --cf-text-primary: {p['text_primary']};
+    --cf-text-secondary: {p['text_secondary']};
+    --cf-text-muted: {p['text_muted']};
+    --cf-orange: {p['accent_orange']};
+    --cf-orange-hover: {p['accent_orange_hover']};
+    --cf-orange-light: {p['accent_orange_light']};
+    --cf-orange-border: {p['accent_orange_border']};
+    --cf-blue: {p['accent_blue']};
+    --cf-safe-bg: {p['status_safe_bg']};
+    --cf-safe-border: {p['status_safe_border']};
+    --cf-safe-text: {p['status_safe_text']};
+    --cf-safe-dot: {p['status_safe_dot']};
+    --cf-susp-bg: {p['status_susp_bg']};
+    --cf-susp-border: {p['status_susp_border']};
+    --cf-susp-text: {p['status_susp_text']};
+    --cf-susp-dot: {p['status_susp_dot']};
+    --cf-phish-bg: {p['status_phish_bg']};
+    --cf-phish-border: {p['status_phish_border']};
+    --cf-phish-text: {p['status_phish_text']};
+    --cf-phish-dot: {p['status_phish_dot']};
+    --cf-info-bg: {p['status_info_bg']};
+    --cf-info-border: {p['status_info_border']};
+    --cf-info-text: {p['status_info_text']};
+    --cf-shadow-card: {p['shadow_card']};
     """
-    Generates an enterprise Cloudflare CSS stylesheet dynamically binding all custom classes
-    and Streamlit component wrappers to the semantic design tokens.
+
+def generate_theme_css(theme_mode: str = "light") -> str:
     """
-    t = get_theme(theme_name)
+    Generates centralized Cloudflare stylesheet supporting Light, Dark, and System modes.
+    Ensures 100% theme consistency across cards, inputs, tables, metrics, headers, and sidebars.
+    """
+    mode = str(theme_mode).lower().strip()
     
+    light_vars = _css_vars_block(CLOUDFLARE_PALETTES["light"])
+    dark_vars = _css_vars_block(CLOUDFLARE_PALETTES["dark"])
+    
+    if mode in ("dark", "🌙 cloudflare dark"):
+        root_declarations = f":root {{\n{dark_vars}\n}}"
+    elif mode in ("system", "💻 system"):
+        root_declarations = f"""
+:root {{
+{light_vars}
+}}
+@media (prefers-color-scheme: dark) {{
+    :root {{
+{dark_vars}
+    }}
+}}
+"""
+    else:  # Light mode (default)
+        root_declarations = f":root {{\n{light_vars}\n}}"
+
     return f"""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
 
-:root {{
-    --cf-bg-page: {t['bg_page']};
-    --cf-bg-surface: {t['bg_surface']};
-    --cf-bg-surface-alt: {t['bg_surface_alt']};
-    --cf-bg-surface-hover: {t['bg_surface_hover']};
-    --cf-bg-sidebar: {t['bg_sidebar']};
-    --cf-border: {t['border']};
-    --cf-border-subtle: {t['border_subtle']};
-    --cf-border-strong: {t['border_strong']};
-    --cf-border-focus: {t['border_focus']};
-    --cf-text-primary: {t['text_primary']};
-    --cf-text-secondary: {t['text_secondary']};
-    --cf-text-muted: {t['text_muted']};
-    --cf-text-inverse: {t['text_inverse']};
-    --cf-orange: {t['accent_orange']};
-    --cf-orange-hover: {t['accent_orange_hover']};
-    --cf-orange-light: {t['accent_orange_light']};
-    --cf-orange-border: {t['accent_orange_border']};
-    --cf-blue: {t['accent_blue']};
-    --cf-blue-hover: {t['accent_blue_hover']};
-    --cf-blue-light: {t['accent_blue_light']};
-    --cf-blue-border: {t['accent_blue_border']};
-    --cf-safe-bg: {t['status_safe_bg']};
-    --cf-safe-border: {t['status_safe_border']};
-    --cf-safe-text: {t['status_safe_text']};
-    --cf-safe-dot: {t['status_safe_dot']};
-    --cf-susp-bg: {t['status_susp_bg']};
-    --cf-susp-border: {t['status_susp_border']};
-    --cf-susp-text: {t['status_susp_text']};
-    --cf-susp-dot: {t['status_susp_dot']};
-    --cf-phish-bg: {t['status_phish_bg']};
-    --cf-phish-border: {t['status_phish_border']};
-    --cf-phish-text: {t['status_phish_text']};
-    --cf-phish-dot: {t['status_phish_dot']};
-    --cf-info-bg: {t['status_info_bg']};
-    --cf-info-border: {t['status_info_border']};
-    --cf-info-text: {t['status_info_text']};
-    --cf-shadow-card: {t['shadow_card']};
-}}
+{root_declarations}
 
-/* Typography */
+/* Base Reset & Typography */
 html, body, [class*="css"] {{
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif !important;
     letter-spacing: -0.011em;
@@ -176,13 +188,19 @@ code, pre, .mono {{
     font-family: "JetBrains Mono", "SFMono-Regular", Consolas, Menlo, monospace !important;
 }}
 
-/* Base Streamlit App Canvas */
+/* Application Canvas */
 .stApp {{
     background-color: var(--cf-bg-page) !important;
     color: var(--cf-text-primary) !important;
 }}
 
-/* Sidebar - Cloudflare Dash Navigation */
+/* Streamlit Header Bar */
+header[data-testid="stHeader"] {{
+    background-color: var(--cf-bg-page) !important;
+    border-bottom: 1px solid var(--cf-border) !important;
+}}
+
+/* Left Navigation Sidebar */
 section[data-testid="stSidebar"] {{
     background-color: var(--cf-bg-sidebar) !important;
     border-right: 1px solid var(--cf-border) !important;
@@ -194,7 +212,7 @@ section[data-testid="stSidebar"] .stRadio label {{
     font-weight: 500 !important;
     color: var(--cf-text-secondary) !important;
     padding: 7px 12px !important;
-    border-radius: 5px !important;
+    border-radius: 4px !important;
     transition: background 0.15s ease, color 0.15s ease !important;
     margin-bottom: 2px !important;
 }}
@@ -204,7 +222,6 @@ section[data-testid="stSidebar"] .stRadio label:hover {{
     color: var(--cf-text-primary) !important;
 }}
 
-/* Active Navigation Indicator */
 section[data-testid="stSidebar"] .stRadio div[role="radiogroup"] > label[data-checked="true"],
 section[data-testid="stSidebar"] .stRadio div[aria-checked="true"] {{
     background-color: var(--cf-orange-light) !important;
@@ -213,14 +230,42 @@ section[data-testid="stSidebar"] .stRadio div[aria-checked="true"] {{
     border-left: 3px solid var(--cf-orange) !important;
 }}
 
-/* Form Inputs, Selectboxes & Textareas */
+/* Non-Editable Segmented Control (Cloudflare Switcher) */
+div[data-testid="stSegmentedControl"] {{
+    background-color: var(--cf-bg-surface-alt) !important;
+    border: 1px solid var(--cf-border) !important;
+    border-radius: 6px !important;
+    padding: 3px !important;
+}}
+
+div[data-testid="stSegmentedControl"] button {{
+    background-color: transparent !important;
+    color: var(--cf-text-secondary) !important;
+    border: none !important;
+    border-radius: 4px !important;
+    font-size: 12px !important;
+    font-weight: 500 !important;
+    padding: 5px 12px !important;
+    transition: all 0.15s ease !important;
+}}
+
+div[data-testid="stSegmentedControl"] button[aria-checked="true"],
+div[data-testid="stSegmentedControl"] button[data-checked="true"] {{
+    background-color: var(--cf-bg-surface) !important;
+    color: var(--cf-orange) !important;
+    font-weight: 600 !important;
+    border: 1px solid var(--cf-border) !important;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05) !important;
+}}
+
+/* Inputs, Textareas & Selectboxes */
 .stTextInput input,
 .stTextArea textarea,
 .stSelectbox div[data-baseweb="select"] > div {{
     background-color: var(--cf-bg-surface) !important;
     color: var(--cf-text-primary) !important;
     border: 1px solid var(--cf-border-strong) !important;
-    border-radius: 5px !important;
+    border-radius: 4px !important;
     font-size: 14px !important;
     padding: 8px 12px !important;
     transition: border-color 0.15s ease, box-shadow 0.15s ease !important;
@@ -234,13 +279,13 @@ section[data-testid="stSidebar"] .stRadio div[aria-checked="true"] {{
     outline: none !important;
 }}
 
-/* Primary Buttons - Cloudflare Orange */
+/* Primary Buttons (Cloudflare Orange) */
 .stButton button,
 button[kind="primary"] {{
     background-color: var(--cf-orange) !important;
     color: #ffffff !important;
     border: 1px solid var(--cf-orange) !important;
-    border-radius: 5px !important;
+    border-radius: 4px !important;
     font-weight: 500 !important;
     font-size: 14px !important;
     padding: 8px 18px !important;
@@ -259,7 +304,7 @@ button[kind="secondary"] {{
     background-color: var(--cf-bg-surface) !important;
     color: var(--cf-text-primary) !important;
     border: 1px solid var(--cf-border-strong) !important;
-    border-radius: 5px !important;
+    border-radius: 4px !important;
     box-shadow: var(--cf-shadow-card) !important;
 }}
 
@@ -267,7 +312,7 @@ button[kind="secondary"]:hover {{
     background-color: var(--cf-bg-surface-hover) !important;
 }}
 
-/* Metric Cards - Cloudflare Dash Analytics Style */
+/* Metric Cards */
 [data-testid="stMetric"] {{
     background-color: var(--cf-bg-surface) !important;
     border: 1px solid var(--cf-border) !important;
@@ -278,7 +323,7 @@ button[kind="secondary"]:hover {{
 
 [data-testid="stMetricLabel"] p {{
     color: var(--cf-text-secondary) !important;
-    font-size: 12px !important;
+    font-size: 11px !important;
     font-weight: 600 !important;
     text-transform: uppercase !important;
     letter-spacing: 0.05em !important;
@@ -286,7 +331,7 @@ button[kind="secondary"]:hover {{
 
 [data-testid="stMetricValue"] {{
     color: var(--cf-text-primary) !important;
-    font-size: 26px !important;
+    font-size: 24px !important;
     font-weight: 700 !important;
     letter-spacing: -0.02em !important;
 }}
@@ -304,10 +349,10 @@ button[kind="secondary"]:hover {{
     background-color: var(--cf-bg-surface) !important;
     color: var(--cf-text-primary) !important;
     border: 1px solid var(--cf-border) !important;
-    border-radius: 6px !important;
+    border-radius: 5px !important;
     font-weight: 600 !important;
     font-size: 14px !important;
-    padding: 12px 16px !important;
+    padding: 10px 14px !important;
 }}
 
 .streamlit-expanderContent {{
@@ -315,36 +360,8 @@ button[kind="secondary"]:hover {{
     color: var(--cf-text-secondary) !important;
     border: 1px solid var(--cf-border) !important;
     border-top: none !important;
-    border-radius: 0 0 6px 6px !important;
-    padding: 16px !important;
-}}
-
-/* File Uploader */
-[data-testid="stFileUploader"] {{
-    background-color: var(--cf-bg-surface) !important;
-    border: 1px dashed var(--cf-border-strong) !important;
-    border-radius: 6px !important;
-    padding: 20px !important;
-}}
-
-/* Tabs */
-.stTabs [data-baseweb="tab-list"] {{
-    border-bottom: 1px solid var(--cf-border) !important;
-    gap: 8px !important;
-}}
-
-.stTabs [data-baseweb="tab"] {{
-    color: var(--cf-text-secondary) !important;
-    font-weight: 500 !important;
-    font-size: 14px !important;
-    padding: 10px 16px !important;
-    border-radius: 4px 4px 0 0 !important;
-}}
-
-.stTabs [aria-selected="true"] {{
-    color: var(--cf-orange) !important;
-    border-bottom: 2px solid var(--cf-orange) !important;
-    font-weight: 600 !important;
+    border-radius: 0 0 5px 5px !important;
+    padding: 14px !important;
 }}
 
 /* Cloudflare Cards */
@@ -352,7 +369,7 @@ button[kind="secondary"]:hover {{
     background-color: var(--cf-bg-surface);
     border: 1px solid var(--cf-border);
     border-radius: 6px;
-    padding: 20px 24px;
+    padding: 18px 22px;
     margin-bottom: 16px;
     box-shadow: var(--cf-shadow-card);
 }}
@@ -362,12 +379,12 @@ button[kind="secondary"]:hover {{
     justify-content: space-between;
     align-items: center;
     border-bottom: 1px solid var(--cf-border);
-    padding-bottom: 12px;
-    margin-bottom: 16px;
+    padding-bottom: 10px;
+    margin-bottom: 14px;
 }}
 
 .cf-card-title {{
-    font-size: 16px;
+    font-size: 15px;
     font-weight: 600;
     color: var(--cf-text-primary);
     margin: 0;
@@ -376,19 +393,19 @@ button[kind="secondary"]:hover {{
 .cf-card-subtitle {{
     font-size: 13px;
     color: var(--cf-text-secondary);
-    margin-top: 4px;
+    margin-top: 3px;
 }}
 
-/* Cloudflare Top Header Bar */
+/* Header Navigation Bar */
 .cf-header-bar {{
     background-color: var(--cf-bg-surface);
-    border-bottom: 1px solid var(--cf-border);
-    padding: 14px 24px;
+    border: 1px solid var(--cf-border);
+    border-radius: 6px;
+    padding: 12px 20px;
     display: flex;
     align-items: center;
     justify-content: space-between;
-    margin-bottom: 24px;
-    border-radius: 6px;
+    margin-bottom: 20px;
     box-shadow: var(--cf-shadow-card);
 }}
 
@@ -402,17 +419,17 @@ button[kind="secondary"]:hover {{
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 32px;
-    height: 32px;
+    width: 30px;
+    height: 30px;
     background-color: var(--cf-orange);
     color: #ffffff;
-    border-radius: 5px;
+    border-radius: 4px;
     font-weight: 800;
-    font-size: 18px;
+    font-size: 16px;
 }}
 
 .cf-header-title {{
-    font-size: 18px;
+    font-size: 16px;
     font-weight: 700;
     color: var(--cf-text-primary);
     margin: 0;
@@ -430,21 +447,21 @@ button[kind="secondary"]:hover {{
     letter-spacing: 0.05em;
 }}
 
-/* Cloudflare Status Badges */
+/* Status Badges with Dot Indicators */
 .cf-badge {{
     display: inline-flex;
     align-items: center;
     gap: 6px;
     font-size: 12px;
     font-weight: 600;
-    padding: 4px 10px;
+    padding: 3px 9px;
     border-radius: 4px;
     line-height: 1.2;
 }}
 
 .cf-badge-dot {{
-    width: 7px;
-    height: 7px;
+    width: 6px;
+    height: 6px;
     border-radius: 50%;
     display: inline-block;
 }}
@@ -454,78 +471,56 @@ button[kind="secondary"]:hover {{
     border: 1px solid var(--cf-safe-border);
     color: var(--cf-safe-text);
 }}
-.cf-badge-safe .cf-badge-dot {{
-    background-color: var(--cf-safe-dot);
-}}
+.cf-badge-safe .cf-badge-dot {{ background-color: var(--cf-safe-dot); }}
 
 .cf-badge-warning {{
     background-color: var(--cf-susp-bg);
     border: 1px solid var(--cf-susp-border);
     color: var(--cf-susp-text);
 }}
-.cf-badge-warning .cf-badge-dot {{
-    background-color: var(--cf-susp-dot);
-}}
+.cf-badge-warning .cf-badge-dot {{ background-color: var(--cf-susp-dot); }}
 
 .cf-badge-danger {{
     background-color: var(--cf-phish-bg);
     border: 1px solid var(--cf-phish-border);
     color: var(--cf-phish-text);
 }}
-.cf-badge-danger .cf-badge-dot {{
-    background-color: var(--cf-phish-dot);
-}}
+.cf-badge-danger .cf-badge-dot {{ background-color: var(--cf-phish-dot); }}
 
 .cf-badge-neutral {{
     background-color: var(--cf-info-bg);
     border: 1px solid var(--cf-info-border);
     color: var(--cf-info-text);
 }}
-.cf-badge-neutral .cf-badge-dot {{
-    background-color: var(--cf-text-muted);
-}}
+.cf-badge-neutral .cf-badge-dot {{ background-color: var(--cf-text-muted); }}
 
 .cf-badge-orange {{
     background-color: var(--cf-orange-light);
     border: 1px solid var(--cf-orange-border);
     color: var(--cf-orange);
 }}
-.cf-badge-orange .cf-badge-dot {{
-    background-color: var(--cf-orange);
-}}
+.cf-badge-orange .cf-badge-dot {{ background-color: var(--cf-orange); }}
 
 /* Finding Box */
 .cf-finding-box {{
     background-color: var(--cf-bg-surface);
     border: 1px solid var(--cf-border);
     border-left-width: 4px;
-    border-radius: 5px;
-    padding: 14px 16px;
-    margin-bottom: 12px;
+    border-radius: 4px;
+    padding: 12px 16px;
+    margin-bottom: 10px;
 }}
 
-.cf-finding-box.CRITICAL {{
-    border-left-color: var(--cf-phish-dot);
-}}
+.cf-finding-box.CRITICAL {{ border-left-color: var(--cf-phish-dot); }}
+.cf-finding-box.HIGH {{ border-left-color: var(--cf-susp-dot); }}
+.cf-finding-box.MEDIUM {{ border-left-color: var(--cf-blue); }}
+.cf-finding-box.LOW {{ border-left-color: var(--cf-safe-dot); }}
 
-.cf-finding-box.HIGH {{
-    border-left-color: var(--cf-susp-dot);
-}}
-
-.cf-finding-box.MEDIUM {{
-    border-left-color: var(--cf-blue);
-}}
-
-.cf-finding-box.LOW {{
-    border-left-color: var(--cf-safe-dot);
-}}
-
-/* Cloudflare Data Table */
+/* Compact Cloudflare Data Table */
 .cf-table {{
     width: 100%;
     border-collapse: collapse;
     font-size: 13px;
-    margin-top: 8px;
 }}
 
 .cf-table th {{
@@ -535,13 +530,13 @@ button[kind="secondary"]:hover {{
     font-size: 11px;
     text-transform: uppercase;
     letter-spacing: 0.05em;
-    padding: 10px 14px;
+    padding: 8px 12px;
     text-align: left;
     border-bottom: 1px solid var(--cf-border);
 }}
 
 .cf-table td {{
-    padding: 12px 14px;
+    padding: 10px 12px;
     color: var(--cf-text-primary);
     border-bottom: 1px solid var(--cf-border);
 }}
@@ -592,5 +587,5 @@ def get_plotly_layout(theme_name: str = "light") -> dict:
             "zerolinecolor": t["chart_grid"],
             "tickfont": {"color": t["chart_text"]}
         },
-        "margin": {"t": 20, "b": 20, "l": 20, "r": 20}
+        "margin": {"t": 15, "b": 15, "l": 15, "r": 15}
     }

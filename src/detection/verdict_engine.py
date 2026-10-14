@@ -242,24 +242,28 @@ class MultiLayerDetectionEngine:
         final_risk_score = int(round(min(max(raw_risk, 0), 100)))
 
         # ======================================================================
-        # 9. Verdict Classification
+        # 9. Verdict Classification (4 Explicit Evidence-Based States)
         # ======================================================================
-        if final_risk_score >= 70 or any(f.get("severity") == "CRITICAL" for f in findings):
+        if cnn_prob is None and ml_prob is None and not is_trusted and not any(f.get("severity") in ("CRITICAL", "HIGH") for f in findings):
+            verdict = "Inconclusive"
+            verdict_badge = "INCONCLUSIVE"
+            summary_statement = "Insufficient model or intelligence signals available to determine definitive classification."
+        elif final_risk_score >= 70 or any(f.get("severity") == "CRITICAL" for f in findings):
             verdict = "Likely Phishing"
             verdict_badge = "CRITICAL_PHISHING"
             summary_statement = "Strong evidence of malicious phishing or deceptive intent detected."
         elif is_trusted:
             verdict = "No Phishing Indicators Detected"
             verdict_badge = "SAFE"
-            summary_statement = "Verified authentic domain match. No malicious indicators observed."
+            summary_statement = "Verified authentic institutional or trusted domain. No malicious indicators observed."
         elif final_risk_score >= 40 or any(f.get("severity") == "HIGH" for f in findings):
-            verdict = "Suspicious — Further Verification Recommended"
+            verdict = "Suspicious"
             verdict_badge = "SUSPICIOUS"
-            summary_statement = "Multiple anomalous indicators detected. Exercise extreme caution."
+            summary_statement = "Multiple anomalous indicators detected. Exercise caution before trusting destination."
         else:
             verdict = "No Phishing Indicators Detected"
             verdict_badge = "SAFE"
-            summary_statement = "Low risk score with minor non-critical observations."
+            summary_statement = "No prominent phishing or deceptive indicators observed."
 
         duration_ms = int((time.time() - start_time) * 1000)
 

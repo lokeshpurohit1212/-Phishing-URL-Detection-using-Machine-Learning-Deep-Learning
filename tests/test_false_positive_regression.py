@@ -81,7 +81,7 @@ class TestGenuineThreatDetection:
             include_tls=False,
             include_threat_intel=False
         )
-        assert result["verdict"] in ("Likely Phishing", "Suspicious — Further Verification Recommended"), (
+        assert result["verdict"] in ("Likely Phishing", "Suspicious", "Suspicious — Further Verification Recommended"), (
             f"Failed to detect threat on {phish_url}: got '{result['verdict']}' (Score: {result['risk_score']})"
         )
         assert result["risk_score"] >= 40, (
