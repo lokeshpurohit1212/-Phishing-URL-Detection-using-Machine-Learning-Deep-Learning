@@ -518,32 +518,39 @@ elif menu_choice == "URL Scanner":
     # SUB-TAB 1: DIRECT URL INPUT
     # --------------------------------------------------------------------------
     with tab_direct:
+        if "input_direct_url" not in st.session_state:
+            st.session_state["input_direct_url"] = st.session_state.get("scanner_url_input", "")
+
+        def set_direct_sample_url(sample_url: str):
+            st.session_state["input_direct_url"] = sample_url
+            st.session_state["scanner_url_input"] = sample_url
+            st.session_state["last_url_scan_res"] = None
+
+        def reset_direct_url():
+            st.session_state["scanner_url_input"] = ""
+            st.session_state["input_direct_url"] = ""
+            st.session_state["last_url_scan_res"] = None
+
         # One-Click Test Samples Row
         render_html("<div style='font-size:12px; font-weight:600; color:var(--cf-text-secondary); margin-bottom:6px;'>DEMONSTRATION TEST SAMPLES:</div>")
         tb1, tb2, tb3, tb4, tb5 = st.columns(5)
         with tb1:
-            if st.button("🎓 Stanford Portal (Clean)", key="demo_btn_stanford", use_container_width=True):
-                st.session_state["scanner_url_input"] = "https://portal.stanford.edu/student/login"
-                st.session_state["last_url_scan_res"] = None
+            st.button("🎓 Stanford Portal (Clean)", key="demo_btn_stanford", use_container_width=True,
+                      on_click=set_direct_sample_url, args=("https://portal.stanford.edu/student/login",))
         with tb2:
-            if st.button("🎓 Oxford Mail (Clean)", key="demo_btn_oxford", use_container_width=True):
-                st.session_state["scanner_url_input"] = "https://mail.ox.ac.uk/owa"
-                st.session_state["last_url_scan_res"] = None
+            st.button("🎓 Oxford Mail (Clean)", key="demo_btn_oxford", use_container_width=True,
+                      on_click=set_direct_sample_url, args=("https://mail.ox.ac.uk/owa",))
         with tb3:
-            if st.button("🔴 PayPal Phish (Malicious)", key="demo_btn_paypal", use_container_width=True):
-                st.session_state["scanner_url_input"] = "http://paypal-security-verification.xyz/login"
-                st.session_state["last_url_scan_res"] = None
+            st.button("🔴 PayPal Phish (Malicious)", key="demo_btn_paypal", use_container_width=True,
+                      on_click=set_direct_sample_url, args=("http://paypal-security-verification.xyz/login",))
         with tb4:
-            if st.button("🔴 Raw IP Admin (Suspicious)", key="demo_btn_ip", use_container_width=True):
-                st.session_state["scanner_url_input"] = "http://192.168.1.1/admin-login"
-                st.session_state["last_url_scan_res"] = None
+            st.button("🔴 Raw IP Admin (Suspicious)", key="demo_btn_ip", use_container_width=True,
+                      on_click=set_direct_sample_url, args=("http://192.168.1.1/admin-login",))
         with tb5:
-            if st.button("🟡 Subdomain Trap (Lookalike)", key="demo_btn_trap", use_container_width=True):
-                st.session_state["scanner_url_input"] = "http://stanford.edu.account-update.xyz/login"
-                st.session_state["last_url_scan_res"] = None
+            st.button("🟡 Subdomain Trap (Lookalike)", key="demo_btn_trap", use_container_width=True,
+                      on_click=set_direct_sample_url, args=("http://stanford.edu.account-update.xyz/login",))
 
-        default_url = st.session_state.get("scanner_url_input", "")
-        target_url = st.text_input("Enter website URL or domain to audit:", value=default_url, placeholder="https://example.com/login", key="input_direct_url")
+        target_url = st.text_input("Enter website URL or domain to audit:", placeholder="https://example.com/login", key="input_direct_url")
 
         # Expandable Inspection Parameters
         with st.expander("⚙️ Inspection Controls & Toggles", expanded=False):
@@ -557,10 +564,7 @@ elif menu_choice == "URL Scanner":
         with col_btn_start:
             btn_run_scan = st.button("Scan URL", type="primary", key="btn_run_direct", use_container_width=True)
         with col_btn_reset:
-            if st.button("Scan Another URL", key="btn_reset_direct", use_container_width=True):
-                st.session_state["scanner_url_input"] = ""
-                st.session_state["last_url_scan_res"] = None
-                st.rerun()
+            st.button("Scan Another URL", key="btn_reset_direct", use_container_width=True, on_click=reset_direct_url)
 
         if btn_run_scan and target_url.strip():
             is_v, err_msg = validate_url_input(target_url)
